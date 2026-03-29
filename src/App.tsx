@@ -36,7 +36,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
-import firebaseConfig from '../firebase-applet-config.json';
+import { supabase } from './supabase';
 
 // Fix leaflet default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -45,37 +45,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
-
-// Firebase Auth
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  User
-} from 'firebase/auth';
-
-// Firestore
-import {
-  collection,
-  addDoc,
-  getDocs,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  Timestamp,
-  getDoc,
-  increment,
-  where,
-  setDoc
-} from 'firebase/firestore';
-
-// Firebase instances from shared config
-import { auth, db, storage } from './firebase';
-
-// Storage
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 // CSV parser
 import Papa from 'papaparse';
@@ -111,11 +80,11 @@ interface ConsultingPost {
   author: string;
   authorUid: string;
   storeName: string;
-  createdAt: Timestamp;
+  createdAt: string;
   status: 'pending' | 'answered';
   answer?: string;
   answeredBy?: string;
-  answeredAt?: Timestamp;
+  answeredAt?: string;
 }
 
 interface UserProfile {
@@ -132,7 +101,7 @@ interface Notice {
   title: string;
   content: string;
   author: string;
-  createdAt: Timestamp;
+  createdAt: string;
   viewCount: number;
 }
 
@@ -146,7 +115,7 @@ interface ManualItem {
   fileUrl?: string;
   fileName?: string;
   author: string;
-  createdAt: Timestamp;
+  createdAt: string;
   viewCount: number;
 }
 
@@ -203,7 +172,7 @@ const BRANCHES = [
 
 export default function App() {
   // --- Auth State ---
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -286,36 +255,59 @@ export default function App() {
   const [kbNewEntry, setKbNewEntry] = useState({ question: '', answer: '', category: '' });
 
   // --- Auth Effects ---
+  const loadUserProfile = async (uid: string, email?: string) => {
+    const { data } = await supabase.from('users').select('*').eq('uid', uid).single();
+    if (data) {
+      setUserProfile({
+        uid: data.uid,
+        email: data.email,
+        name: data.name,
+        role: data.role,
+        storeName: data.store_name,
+        position: data.position,
+      });
+    } else {
+      // Check if this is a HQ account
+      const hqAccount = HQ_ACCOUNTS.find(a => a.email === email);
+      if (hqAccount) {
+        const profile: UserProfile = {
+          uid,
+          email: hqAccount.email,
+          name: hqAccount.name,
+          role: hqAccount.role as 'manager' | 'owner',
+          storeName: hqAccount.storeName,
+          position: hqAccount.position,
+        };
+        await supabase.from('users').upsert({
+          uid,
+          email: hqAccount.email,
+          name: hqAccount.name,
+          role: hqAccount.role,
+          store_name: hqAccount.storeName,
+          position: hqAccount.position,
+        });
+        setUserProfile(profile);
+      }
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        // Load user profile
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data() as UserProfile);
-        } else {
-          // Check if this is a HQ account
-          const hqAccount = HQ_ACCOUNTS.find(a => a.email === firebaseUser.email);
-          if (hqAccount) {
-            const profile: UserProfile = {
-              uid: firebaseUser.uid,
-              email: hqAccount.email,
-              name: hqAccount.name,
-              role: hqAccount.role as 'manager' | 'owner',
-              storeName: hqAccount.storeName,
-              position: hqAccount.position,
-            };
-            await setDoc(doc(db, 'users', firebaseUser.uid), profile);
-            setUserProfile(profile);
-          }
-        }
-      } else {
-        setUserProfile(null);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadUserProfile(session.user.id, session.user.email);
       }
       setIsAuthReady(true);
     });
-    return () => unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadUserProfile(session.user.id, session.user.email);
+      } else {
+        setUserProfile(null);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // --- Load Data ---
@@ -330,9 +322,25 @@ export default function App() {
   // --- Data Loading Functions ---
   const loadConsultingPosts = async () => {
     try {
-      const q = query(collection(db, 'consulting_posts'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ConsultingPost));
+      const { data, error } = await supabase
+        .from('consulting_posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const posts: ConsultingPost[] = (data ?? []).map((row: any) => ({
+        id: row.id,
+        category: row.category,
+        title: row.title,
+        content: row.content,
+        author: row.author,
+        authorUid: row.author_uid,
+        storeName: row.store_name,
+        createdAt: row.created_at,
+        status: row.status,
+        answer: row.answer,
+        answeredBy: row.answered_by,
+        answeredAt: row.answered_at,
+      }));
       setConsultingPosts(posts);
     } catch (error) {
       console.error('Error loading consulting posts:', error);
@@ -341,9 +349,19 @@ export default function App() {
 
   const loadNotices = async () => {
     try {
-      const q = query(collection(db, 'notices'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notice));
+      const { data, error } = await supabase
+        .from('notices')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const items: Notice[] = (data ?? []).map((row: any) => ({
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        author: row.author,
+        createdAt: row.created_at,
+        viewCount: row.view_count ?? 0,
+      }));
       setNotices(items);
     } catch (error) {
       console.error('Error loading notices:', error);
@@ -352,9 +370,24 @@ export default function App() {
 
   const loadManualItems = async () => {
     try {
-      const q = query(collection(db, 'manuals'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ManualItem));
+      const { data, error } = await supabase
+        .from('manuals')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const items: ManualItem[] = (data ?? []).map((row: any) => ({
+        id: row.id,
+        category: row.category,
+        title: row.title,
+        content: row.content,
+        imageUrl: row.image_url,
+        videoUrl: row.video_url,
+        fileUrl: row.file_url,
+        fileName: row.file_name,
+        author: row.author,
+        createdAt: row.created_at,
+        viewCount: row.view_count ?? 0,
+      }));
       setManualItems(items);
     } catch (error) {
       console.error('Error loading manual items:', error);
@@ -363,8 +396,16 @@ export default function App() {
 
   const loadAllUsers = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'users'));
-      const users = snapshot.docs.map(d => d.data() as UserProfile);
+      const { data, error } = await supabase.from('users').select('*');
+      if (error) throw error;
+      const users: UserProfile[] = (data ?? []).map((row: any) => ({
+        uid: row.uid,
+        email: row.email,
+        name: row.name,
+        role: row.role,
+        storeName: row.store_name,
+        position: row.position,
+      }));
       setAllUsers(users);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -377,7 +418,11 @@ export default function App() {
     setAuthLoading(true);
     setAuthError('');
     try {
-      await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginForm.email,
+        password: loginForm.password,
+      });
+      if (error) throw error;
     } catch (error: any) {
       setAuthError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.');
     }
@@ -389,32 +434,30 @@ export default function App() {
     setAuthLoading(true);
     setAuthError('');
     try {
-      const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: signUpForm.email,
-          password: signUpForm.password,
-          returnSecureToken: true,
-        }),
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: signUpForm.email,
+        password: signUpForm.password,
       });
-      const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error.message);
-      }
-      // Sign in after sign up
-      await signInWithEmailAndPassword(auth, signUpForm.email, signUpForm.password);
-      // Create user profile
-      if (auth.currentUser) {
+      if (authError) throw authError;
+
+      // Create user profile in users table
+      if (authData.user) {
         const profile: UserProfile = {
-          uid: auth.currentUser.uid,
+          uid: authData.user.id,
           email: signUpForm.email,
           name: signUpForm.name,
           role: 'owner',
           storeName: signUpForm.storeName,
           position: '점주',
         };
-        await setDoc(doc(db, 'users', auth.currentUser.uid), profile);
+        await supabase.from('users').insert({
+          uid: authData.user.id,
+          email: signUpForm.email,
+          name: signUpForm.name,
+          role: 'owner',
+          store_name: signUpForm.storeName,
+          position: '점주',
+        });
         setUserProfile(profile);
       }
     } catch (error: any) {
@@ -424,7 +467,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     setUserProfile(null);
     setActiveTab('home');
   };
@@ -433,14 +476,14 @@ export default function App() {
   const handleCreatePost = async () => {
     if (!user || !userProfile || !newPost.title || !newPost.content) return;
     try {
-      await addDoc(collection(db, 'consulting_posts'), {
+      await supabase.from('consulting_posts').insert({
         category: newPost.category,
         title: newPost.title,
         content: newPost.content,
         author: userProfile.name,
-        authorUid: user.uid,
-        storeName: userProfile.storeName,
-        createdAt: Timestamp.now(),
+        author_uid: user.id,
+        store_name: userProfile.storeName,
+        created_at: new Date().toISOString(),
         status: 'pending',
       });
 
@@ -471,12 +514,12 @@ export default function App() {
   const handleAnswerPost = async (postId: string) => {
     if (!answerText || !userProfile) return;
     try {
-      await updateDoc(doc(db, 'consulting_posts', postId), {
+      await supabase.from('consulting_posts').update({
         status: 'answered',
         answer: answerText,
-        answeredBy: userProfile.name,
-        answeredAt: Timestamp.now(),
-      });
+        answered_by: userProfile.name,
+        answered_at: new Date().toISOString(),
+      }).eq('id', postId);
       setAnswerText('');
       setSelectedPost(null);
       loadConsultingPosts();
@@ -487,7 +530,7 @@ export default function App() {
 
   const handleDeletePost = async (postId: string) => {
     try {
-      await deleteDoc(doc(db, 'consulting_posts', postId));
+      await supabase.from('consulting_posts').delete().eq('id', postId);
       setSelectedPost(null);
       loadConsultingPosts();
     } catch (error) {
@@ -500,14 +543,14 @@ export default function App() {
     if (!sosForm.title || !sosForm.message || !userProfile) return;
     setSosLoading(true);
     try {
-      // Save to Firestore
-      await addDoc(collection(db, 'sos_inquiries'), {
+      // Save to Supabase
+      await supabase.from('sos_inquiries').insert({
         title: sosForm.title,
         message: sosForm.message,
         author: userProfile.name,
-        authorUid: user?.uid,
-        storeName: userProfile.storeName,
-        createdAt: Timestamp.now(),
+        author_uid: user?.id,
+        store_name: userProfile.storeName,
+        created_at: new Date().toISOString(),
         status: 'pending',
       });
 
@@ -542,12 +585,12 @@ export default function App() {
   const handleCreateNotice = async () => {
     if (!newNotice.title || !newNotice.content || !userProfile) return;
     try {
-      await addDoc(collection(db, 'notices'), {
+      await supabase.from('notices').insert({
         title: newNotice.title,
         content: newNotice.content,
         author: userProfile.name,
-        createdAt: Timestamp.now(),
-        viewCount: 0,
+        created_at: new Date().toISOString(),
+        view_count: 0,
       });
       setNewNotice({ title: '', content: '' });
       setShowCreateNotice(false);
@@ -562,9 +605,10 @@ export default function App() {
     setShowNoticeModal(true);
     // Increment view count
     try {
-      await updateDoc(doc(db, 'notices', notice.id), {
-        viewCount: increment(1),
-      });
+      const { data: currentNotice } = await supabase.from('notices').select('view_count').eq('id', notice.id).single();
+      await supabase.from('notices').update({
+        view_count: (currentNotice?.view_count ?? 0) + 1,
+      }).eq('id', notice.id);
     } catch (error) {
       console.error('Error updating view count:', error);
     }
@@ -573,10 +617,10 @@ export default function App() {
   const handleEditNotice = async () => {
     if (!editNotice.title || !editNotice.content) return;
     try {
-      await updateDoc(doc(db, 'notices', editNotice.id), {
+      await supabase.from('notices').update({
         title: editNotice.title,
         content: editNotice.content,
-      });
+      }).eq('id', editNotice.id);
       setShowEditNotice(false);
       setShowNoticeModal(false);
       setSelectedNotice(null);
@@ -589,7 +633,7 @@ export default function App() {
   const handleDeleteNotice = async () => {
     if (!deleteNoticeId) return;
     try {
-      await deleteDoc(doc(db, 'notices', deleteNoticeId));
+      await supabase.from('notices').delete().eq('id', deleteNoticeId);
       setShowDeleteNoticeConfirm(false);
       setDeleteNoticeId('');
       setShowNoticeModal(false);
@@ -610,37 +654,30 @@ export default function App() {
       let fileName = '';
 
       if (manualFile) {
-        const storageRef = ref(storage, `manuals/${Date.now()}_${manualFile.name}`);
-        const uploadTask = uploadBytesResumable(storageRef, manualFile);
-
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on(
-            'state_changed',
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(progress);
-            },
-            (error) => reject(error),
-            async () => {
-              fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              fileName = manualFile.name;
-              resolve();
-            }
-          );
-        });
+        const filePath = `manuals/${Date.now()}_${manualFile.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('uploads')
+          .upload(filePath, manualFile);
+        if (uploadError) throw uploadError;
+        if (uploadData) {
+          const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(filePath);
+          fileUrl = urlData.publicUrl;
+          fileName = manualFile.name;
+        }
+        setUploadProgress(100);
       }
 
-      await addDoc(collection(db, 'manuals'), {
+      await supabase.from('manuals').insert({
         category: newManual.category,
         title: newManual.title,
         content: newManual.content,
-        imageUrl: newManual.imageUrl || '',
-        videoUrl: newManual.videoUrl || '',
-        fileUrl,
-        fileName,
+        image_url: newManual.imageUrl || '',
+        video_url: newManual.videoUrl || '',
+        file_url: fileUrl,
+        file_name: fileName,
         author: userProfile.name,
-        createdAt: Timestamp.now(),
-        viewCount: 0,
+        created_at: new Date().toISOString(),
+        view_count: 0,
       });
 
       setNewManual({ category: Category.RECIPE, title: '', content: '', imageUrl: '', videoUrl: '' });
@@ -657,9 +694,10 @@ export default function App() {
   const handleViewManual = async (item: ManualItem) => {
     setSelectedManual(item);
     try {
-      await updateDoc(doc(db, 'manuals', item.id), {
-        viewCount: increment(1),
-      });
+      const { data: currentManual } = await supabase.from('manuals').select('view_count').eq('id', item.id).single();
+      await supabase.from('manuals').update({
+        view_count: (currentManual?.view_count ?? 0) + 1,
+      }).eq('id', item.id);
     } catch (error) {
       console.error('Error updating view count:', error);
     }
@@ -668,13 +706,13 @@ export default function App() {
   const handleEditManual = async () => {
     if (!editManual.title || !editManual.content) return;
     try {
-      await updateDoc(doc(db, 'manuals', editManual.id), {
+      await supabase.from('manuals').update({
         title: editManual.title,
         content: editManual.content,
         category: editManual.category,
-        imageUrl: editManual.imageUrl || '',
-        videoUrl: editManual.videoUrl || '',
-      });
+        image_url: editManual.imageUrl || '',
+        video_url: editManual.videoUrl || '',
+      }).eq('id', editManual.id);
       setShowEditManual(false);
       setSelectedManual(null);
       loadManualItems();
@@ -686,7 +724,7 @@ export default function App() {
   const handleDeleteManual = async () => {
     if (!deleteManualId) return;
     try {
-      await deleteDoc(doc(db, 'manuals', deleteManualId));
+      await supabase.from('manuals').delete().eq('id', deleteManualId);
       setShowDeleteManualConfirm(false);
       setDeleteManualId('');
       setSelectedManual(null);
@@ -725,10 +763,10 @@ export default function App() {
       // Load knowledge base for context
       let kbContext = '';
       try {
-        const kbSnapshot = await getDocs(collection(db, 'knowledge_base'));
-        const kbItems = kbSnapshot.docs.map(d => d.data());
-        if (kbItems.length > 0) {
-          kbContext = '\n\n[참고 지식베이스]\n' + kbItems.map(item => `Q: ${item.question}\nA: ${item.answer}`).join('\n\n');
+        const { data: kbItems } = await supabase.from('knowledge_base').select('*');
+        const kbItemsMapped = kbItems ?? [];
+        if (kbItemsMapped.length > 0) {
+          kbContext = '\n\n[참고 지식베이스]\n' + kbItemsMapped.map((item: any) => `Q: ${item.question}\nA: ${item.answer}`).join('\n\n');
         }
       } catch {
         // ignore KB load error
@@ -790,7 +828,7 @@ export default function App() {
           role: createUserForm.role,
           storeName: createUserForm.storeName,
           position: createUserForm.position || (createUserForm.role === 'owner' ? '점주' : '직원'),
-          adminUid: user?.uid,
+          adminUid: user?.id,
         }),
       });
       const data = await response.json();
@@ -809,11 +847,11 @@ export default function App() {
   const handleKbAddEntry = async () => {
     if (!kbNewEntry.question || !kbNewEntry.answer) return;
     try {
-      await addDoc(collection(db, 'knowledge_base'), {
+      await supabase.from('knowledge_base').insert({
         question: kbNewEntry.question,
         answer: kbNewEntry.answer,
         category: kbNewEntry.category || '일반',
-        createdAt: Timestamp.now(),
+        created_at: new Date().toISOString(),
       });
       setKbNewEntry({ question: '', answer: '', category: '' });
       setKbUploadResult('지식베이스에 항목이 추가되었습니다.');
@@ -836,11 +874,11 @@ export default function App() {
           let count = 0;
           for (const row of results.data as any[]) {
             if (row.question && row.answer) {
-              await addDoc(collection(db, 'knowledge_base'), {
+              await supabase.from('knowledge_base').insert({
                 question: row.question,
                 answer: row.answer,
                 category: row.category || '일반',
-                createdAt: Timestamp.now(),
+                created_at: new Date().toISOString(),
               });
               count++;
             }
@@ -861,9 +899,9 @@ export default function App() {
   };
 
   // --- Helper ---
-  const formatDate = (timestamp: Timestamp) => {
-    if (!timestamp?.toDate) return '';
-    const date = timestamp.toDate();
+  const formatDate = (timestamp: string) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
   };
 
@@ -891,7 +929,7 @@ export default function App() {
     if (consultingFilter === 'all') return true;
     if (consultingFilter === 'pending') return post.status === 'pending';
     if (consultingFilter === 'answered') return post.status === 'answered';
-    if (consultingFilter === 'mine') return post.authorUid === user?.uid;
+    if (consultingFilter === 'mine') return post.authorUid === user?.id;
     return post.category === consultingFilter;
   });
 
@@ -1397,7 +1435,7 @@ export default function App() {
                 )}
 
                 {/* Delete button for manager or post author */}
-                {(isManager || selectedPost.authorUid === user?.uid) && (
+                {(isManager || selectedPost.authorUid === user?.id) && (
                   <button
                     onClick={() => handleDeletePost(selectedPost.id)}
                     className="mt-3 text-[#5d4037]/70 text-sm flex items-center gap-1 hover:text-[#5d4037]"
@@ -1771,10 +1809,10 @@ export default function App() {
                   <button
                     onClick={async () => {
                       try {
-                        await addDoc(collection(db, 'business_registrations'), {
+                        await supabase.from('business_registrations').insert({
                           ...businessRegForm,
-                          createdAt: Timestamp.now(),
-                          registeredBy: userProfile?.name,
+                          created_at: new Date().toISOString(),
+                          registered_by: userProfile?.name,
                         });
                         setBusinessRegForm({ businessName: '', ownerName: '', businessNumber: '', address: '', phone: '' });
                         setShowBusinessReg(false);
