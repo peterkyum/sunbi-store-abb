@@ -424,7 +424,7 @@ export default function App() {
       });
       if (error) throw error;
     } catch (error: any) {
-      setAuthError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.');
+      setAuthError(`로그인 실패: ${error?.message || '이메일과 비밀번호를 확인해 주세요.'}`);
     }
     setAuthLoading(false);
   };
