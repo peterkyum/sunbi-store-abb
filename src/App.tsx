@@ -256,10 +256,20 @@ export default function App() {
 
   // --- Auth Effects ---
   const loadUserProfile = async (uid: string, email?: string) => {
-    const { data, error } = await supabase.from('users').select('*').eq('uid', uid).maybeSingle();
+    // Try by uid first, then by email as fallback
+    let { data } = await supabase.from('users').select('*').eq('uid', uid).maybeSingle();
+    if (!data && email) {
+      const result = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      data = result.data;
+      // Update uid if found by email
+      if (data) {
+        await supabase.from('users').update({ uid }).eq('email', email);
+      }
+    }
+
     if (data) {
       setUserProfile({
-        uid: data.uid,
+        uid: data.uid || uid,
         email: data.email,
         name: data.name,
         role: data.role,
