@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@font-face {
+    font-family: 'Gukdetteokbokki';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_twelve@1.1/Gukdetteokbokki.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@theme {
+  --font-sans: "Gukdetteokbokki", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #4a3a32; /* Dark Brown from design */
+  --color-accent: #ffeb3b;  /* Yellow from design */
+  --color-brand-green: #8bc34a; /* Brand Green */
+}
+
+@layer base {
+  body {
+    @apply bg-primary text-white font-sans;
+  }
+}
+
+.markdown-body p {
+  @apply mb-2 last:mb-0;
+}
+.markdown-body ul {
+  @apply list-disc pl-4 mb-2;
+}
+.markdown-body ol {
+  @apply list-decimal pl-4 mb-2;
+}
+.markdown-body li {
+  @apply mb-1;
+}
+.markdown-body strong {
+  @apply font-bold;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  @apply font-bold mt-3 mb-1;
+}

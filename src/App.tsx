@@ -1,0 +1,2656 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import {
+  Search,
+  Video,
+  ClipboardCheck,
+  FileText,
+  Image as ImageIcon,
+  MessageSquare,
+  Leaf,
+  Bell,
+  Phone,
+  Plus,
+  Send,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Upload,
+  Eye,
+  MapPin,
+  ChevronRight,
+  PlayCircle,
+  Edit,
+  Trash2,
+  Users,
+  Download
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { GoogleGenAI } from "@google/genai";
+import Markdown from 'react-markdown';
+import firebaseConfig from '../firebase-applet-config.json';
+
+// Fix leaflet default icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+// Firebase Auth
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  User
+} from 'firebase/auth';
+
+// Firestore
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  Timestamp,
+  getDoc,
+  increment,
+  where,
+  setDoc
+} from 'firebase/firestore';
+
+// Firebase instances from shared config
+import { auth, db, storage } from './firebase';
+
+// Storage
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+
+// CSV parser
+import Papa from 'papaparse';
+
+// --- Constants ---
+const MENU_ITEMS = [
+  { id: 'home', label: '홈', icon: Leaf },
+  { id: 'consulting', label: '1:1 문의', icon: MessageSquare },
+];
+
+enum Category {
+  RECIPE = 'recipe',
+  VIDEO = 'video',
+  CHECKLIST = 'checklist',
+  DOCUMENT = 'document',
+  IMAGE = 'image',
+}
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  [Category.RECIPE]: '레시피',
+  [Category.VIDEO]: '영상 매뉴얼',
+  [Category.CHECKLIST]: '체크리스트',
+  [Category.DOCUMENT]: '문서/서식',
+  [Category.IMAGE]: '이미지 자료',
+};
+
+// --- Interfaces ---
+interface ConsultingPost {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
+  author: string;
+  authorUid: string;
+  storeName: string;
+  createdAt: Timestamp;
+  status: 'pending' | 'answered';
+  answer?: string;
+  answeredBy?: string;
+  answeredAt?: Timestamp;
+}
+
+interface UserProfile {
+  uid: string;
+  email: string;
+  name: string;
+  role: 'manager' | 'owner';
+  storeName: string;
+  position: string;
+}
+
+interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  createdAt: Timestamp;
+  viewCount: number;
+}
+
+interface ManualItem {
+  id: string;
+  category: Category;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  fileUrl?: string;
+  fileName?: string;
+  author: string;
+  createdAt: Timestamp;
+  viewCount: number;
+}
+
+// HQ accounts (본사 계정)
+const HQ_ACCOUNTS = [
+  { email: 'peterkim9427@gmail.com', pw: 'sunbi1234', name: '김연겸', position: '본부장', role: 'manager', storeName: '본사' },
+  { email: 'kang@sunbi.com', pw: 'sunbi1234', name: '강한빛', position: '대표', role: 'manager', storeName: '본사' },
+  { email: 'byun@sunbi.com', pw: 'sunbi1234', name: '변우석', position: '이사', role: 'manager', storeName: '본사' },
+  { email: 'yoon@sunbi.com', pw: 'sunbi1234', name: '윤석진', position: '팀장', role: 'manager', storeName: '본사' },
+  { email: 'gil@sunbi.com', pw: 'sunbi1234', name: '길태훈', position: '팀장', role: 'manager', storeName: '본사' }
+];
+
+// Branches (38 entries)
+const BRANCHES = [
+  { name: '성내점', lat: 37.5301, lng: 127.1270 },
+  { name: '명일점', lat: 37.5565, lng: 127.1455 },
+  { name: '고덕점', lat: 37.5560, lng: 127.1540 },
+  { name: '암사점', lat: 37.5520, lng: 127.1280 },
+  { name: '길동점', lat: 37.5370, lng: 127.1390 },
+  { name: '둔촌점', lat: 37.5230, lng: 127.1360 },
+  { name: '천호점', lat: 37.5385, lng: 127.1230 },
+  { name: '강일점', lat: 37.5580, lng: 127.1720 },
+  { name: '상일점', lat: 37.5570, lng: 127.1660 },
+  { name: '미사점', lat: 37.5610, lng: 127.1900 },
+  { name: '위례점', lat: 37.4780, lng: 127.1430 },
+  { name: '송파점', lat: 37.5050, lng: 127.1120 },
+  { name: '잠실점', lat: 37.5130, lng: 127.1000 },
+  { name: '문정점', lat: 37.4850, lng: 127.1260 },
+  { name: '가락점', lat: 37.4960, lng: 127.1180 },
+  { name: '오금점', lat: 37.5020, lng: 127.1280 },
+  { name: '방이점', lat: 37.5110, lng: 127.1150 },
+  { name: '석촌점', lat: 37.5060, lng: 127.1050 },
+  { name: '마천점', lat: 37.4950, lng: 127.1500 },
+  { name: '거여점', lat: 37.4970, lng: 127.1440 },
+  { name: '장지점', lat: 37.4780, lng: 127.1260 },
+  { name: '복정점', lat: 37.4700, lng: 127.1260 },
+  { name: '수서점', lat: 37.4870, lng: 127.1020 },
+  { name: '일원점', lat: 37.4830, lng: 127.0870 },
+  { name: '개포점', lat: 37.4780, lng: 127.0550 },
+  { name: '대치점', lat: 37.4940, lng: 127.0630 },
+  { name: '도곡점', lat: 37.4870, lng: 127.0440 },
+  { name: '역삼점', lat: 37.5010, lng: 127.0370 },
+  { name: '삼성점', lat: 37.5090, lng: 127.0630 },
+  { name: '청담점', lat: 37.5200, lng: 127.0530 },
+  { name: '압구정점', lat: 37.5270, lng: 127.0280 },
+  { name: '신사점', lat: 37.5160, lng: 127.0200 },
+  { name: '논현점', lat: 37.5110, lng: 127.0290 },
+  { name: '반포점', lat: 37.5050, lng: 127.0110 },
+  { name: '서초점', lat: 37.4920, lng: 127.0070 },
+  { name: '양재점', lat: 37.4840, lng: 127.0340 },
+  { name: '내곡점', lat: 37.4680, lng: 127.0700 },
+  { name: '세곡점', lat: 37.4650, lng: 127.0990 },
+];
+
+export default function App() {
+  // --- Auth State ---
+  const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [signUpForm, setSignUpForm] = useState({ email: '', password: '', name: '', storeName: '' });
+  const [authError, setAuthError] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+
+  // --- App State ---
+  const [activeTab, setActiveTab] = useState('home');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // --- Consulting State ---
+  const [consultingPosts, setConsultingPosts] = useState<ConsultingPost[]>([]);
+  const [selectedPost, setSelectedPost] = useState<ConsultingPost | null>(null);
+  const [showCreatePost, setShowCreatePost] = useState(false);
+  const [newPost, setNewPost] = useState({ category: '운영', title: '', content: '' });
+  const [answerText, setAnswerText] = useState('');
+  const [consultingFilter, setConsultingFilter] = useState('all');
+
+  // --- SOS State ---
+  const [showSosModal, setShowSosModal] = useState(false);
+  const [sosForm, setSosForm] = useState({ title: '', message: '' });
+  const [sosLoading, setSosLoading] = useState(false);
+  const [sosSuccess, setSosSuccess] = useState(false);
+
+  // --- Notice State ---
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
+  const [showCreateNotice, setShowCreateNotice] = useState(false);
+  const [newNotice, setNewNotice] = useState({ title: '', content: '' });
+  const [showEditNotice, setShowEditNotice] = useState(false);
+  const [editNotice, setEditNotice] = useState({ id: '', title: '', content: '' });
+  const [showDeleteNoticeConfirm, setShowDeleteNoticeConfirm] = useState(false);
+  const [deleteNoticeId, setDeleteNoticeId] = useState('');
+
+  // --- Manual State ---
+  const [manualItems, setManualItems] = useState<ManualItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [selectedManual, setSelectedManual] = useState<ManualItem | null>(null);
+  const [showCreateManual, setShowCreateManual] = useState(false);
+  const [newManual, setNewManual] = useState({ category: Category.RECIPE, title: '', content: '', imageUrl: '', videoUrl: '' });
+  const [manualFile, setManualFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showEditManual, setShowEditManual] = useState(false);
+  const [editManual, setEditManual] = useState<{ id: string; category: Category; title: string; content: string; imageUrl: string; videoUrl: string }>({ id: '', category: Category.RECIPE, title: '', content: '', imageUrl: '', videoUrl: '' });
+  const [showDeleteManualConfirm, setShowDeleteManualConfirm] = useState(false);
+  const [deleteManualId, setDeleteManualId] = useState('');
+
+  // --- Q&A Chat State ---
+  const [showQaChat, setShowQaChat] = useState(false);
+  const [qaMessages, setQaMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [qaInput, setQaInput] = useState('');
+  const [qaLoading, setQaLoading] = useState(false);
+
+  // --- Map State ---
+  const [showMap, setShowMap] = useState(false);
+
+  // --- A/S State ---
+  const [showAsContacts, setShowAsContacts] = useState(false);
+
+  // --- Business Registration State ---
+  const [showBusinessReg, setShowBusinessReg] = useState(false);
+  const [businessRegForm, setBusinessRegForm] = useState({ businessName: '', ownerName: '', businessNumber: '', address: '', phone: '' });
+
+  // --- User Management State ---
+  const [showUserManagement, setShowUserManagement] = useState(false);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [createUserForm, setCreateUserForm] = useState({ email: '', password: '', name: '', role: 'owner' as 'manager' | 'owner', storeName: '', position: '' });
+  const [createUserLoading, setCreateUserLoading] = useState(false);
+  const [createUserError, setCreateUserError] = useState('');
+
+  // --- KB Management State ---
+  const [showKbManagement, setShowKbManagement] = useState(false);
+  const [kbCsvFile, setKbCsvFile] = useState<File | null>(null);
+  const [kbUploadLoading, setKbUploadLoading] = useState(false);
+  const [kbUploadResult, setKbUploadResult] = useState('');
+  const [kbNewEntry, setKbNewEntry] = useState({ question: '', answer: '', category: '' });
+
+  // --- Auth Effects ---
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        // Load user profile
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data() as UserProfile);
+        } else {
+          // Check if this is a HQ account
+          const hqAccount = HQ_ACCOUNTS.find(a => a.email === firebaseUser.email);
+          if (hqAccount) {
+            const profile: UserProfile = {
+              uid: firebaseUser.uid,
+              email: hqAccount.email,
+              name: hqAccount.name,
+              role: hqAccount.role as 'manager' | 'owner',
+              storeName: hqAccount.storeName,
+              position: hqAccount.position,
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), profile);
+            setUserProfile(profile);
+          }
+        }
+      } else {
+        setUserProfile(null);
+      }
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- Load Data ---
+  useEffect(() => {
+    if (user) {
+      loadConsultingPosts();
+      loadNotices();
+      loadManualItems();
+    }
+  }, [user]);
+
+  // --- Data Loading Functions ---
+  const loadConsultingPosts = async () => {
+    try {
+      const q = query(collection(db, 'consulting_posts'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ConsultingPost));
+      setConsultingPosts(posts);
+    } catch (error) {
+      console.error('Error loading consulting posts:', error);
+    }
+  };
+
+  const loadNotices = async () => {
+    try {
+      const q = query(collection(db, 'notices'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notice));
+      setNotices(items);
+    } catch (error) {
+      console.error('Error loading notices:', error);
+    }
+  };
+
+  const loadManualItems = async () => {
+    try {
+      const q = query(collection(db, 'manuals'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ManualItem));
+      setManualItems(items);
+    } catch (error) {
+      console.error('Error loading manual items:', error);
+    }
+  };
+
+  const loadAllUsers = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, 'users'));
+      const users = snapshot.docs.map(d => d.data() as UserProfile);
+      setAllUsers(users);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    }
+  };
+
+  // --- Auth Handlers ---
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
+    } catch (error: any) {
+      setAuthError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: signUpForm.email,
+          password: signUpForm.password,
+          returnSecureToken: true,
+        }),
+      });
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+      // Sign in after sign up
+      await signInWithEmailAndPassword(auth, signUpForm.email, signUpForm.password);
+      // Create user profile
+      if (auth.currentUser) {
+        const profile: UserProfile = {
+          uid: auth.currentUser.uid,
+          email: signUpForm.email,
+          name: signUpForm.name,
+          role: 'owner',
+          storeName: signUpForm.storeName,
+          position: '점주',
+        };
+        await setDoc(doc(db, 'users', auth.currentUser.uid), profile);
+        setUserProfile(profile);
+      }
+    } catch (error: any) {
+      setAuthError(error.message || '회원가입에 실패했습니다.');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    setUserProfile(null);
+    setActiveTab('home');
+  };
+
+  // --- Consulting Handlers ---
+  const handleCreatePost = async () => {
+    if (!user || !userProfile || !newPost.title || !newPost.content) return;
+    try {
+      await addDoc(collection(db, 'consulting_posts'), {
+        category: newPost.category,
+        title: newPost.title,
+        content: newPost.content,
+        author: userProfile.name,
+        authorUid: user.uid,
+        storeName: userProfile.storeName,
+        createdAt: Timestamp.now(),
+        status: 'pending',
+      });
+
+      // Notify via server (Slack + Notion)
+      try {
+        await fetch('/api/notion/consulting', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeName: userProfile.storeName,
+            category: newPost.category,
+            title: newPost.title,
+            content: newPost.content,
+          }),
+        });
+      } catch (notifyError) {
+        console.error('Notification error:', notifyError);
+      }
+
+      setNewPost({ category: '운영', title: '', content: '' });
+      setShowCreatePost(false);
+      loadConsultingPosts();
+    } catch (error) {
+      console.error('Error creating post:', error);
+    }
+  };
+
+  const handleAnswerPost = async (postId: string) => {
+    if (!answerText || !userProfile) return;
+    try {
+      await updateDoc(doc(db, 'consulting_posts', postId), {
+        status: 'answered',
+        answer: answerText,
+        answeredBy: userProfile.name,
+        answeredAt: Timestamp.now(),
+      });
+      setAnswerText('');
+      setSelectedPost(null);
+      loadConsultingPosts();
+    } catch (error) {
+      console.error('Error answering post:', error);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    try {
+      await deleteDoc(doc(db, 'consulting_posts', postId));
+      setSelectedPost(null);
+      loadConsultingPosts();
+    } catch (error) {
+      console.error('Error deleting post:', error);
+    }
+  };
+
+  // --- SOS Handler ---
+  const handleSosSubmit = async () => {
+    if (!sosForm.title || !sosForm.message || !userProfile) return;
+    setSosLoading(true);
+    try {
+      // Save to Firestore
+      await addDoc(collection(db, 'sos_inquiries'), {
+        title: sosForm.title,
+        message: sosForm.message,
+        author: userProfile.name,
+        authorUid: user?.uid,
+        storeName: userProfile.storeName,
+        createdAt: Timestamp.now(),
+        status: 'pending',
+      });
+
+      // Notify via server
+      try {
+        await fetch('/api/notion/sos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeName: userProfile.storeName,
+            title: sosForm.title,
+            message: sosForm.message,
+          }),
+        });
+      } catch (notifyError) {
+        console.error('SOS notification error:', notifyError);
+      }
+
+      setSosSuccess(true);
+      setSosForm({ title: '', message: '' });
+      setTimeout(() => {
+        setSosSuccess(false);
+        setShowSosModal(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Error submitting SOS:', error);
+    }
+    setSosLoading(false);
+  };
+
+  // --- Notice Handlers ---
+  const handleCreateNotice = async () => {
+    if (!newNotice.title || !newNotice.content || !userProfile) return;
+    try {
+      await addDoc(collection(db, 'notices'), {
+        title: newNotice.title,
+        content: newNotice.content,
+        author: userProfile.name,
+        createdAt: Timestamp.now(),
+        viewCount: 0,
+      });
+      setNewNotice({ title: '', content: '' });
+      setShowCreateNotice(false);
+      loadNotices();
+    } catch (error) {
+      console.error('Error creating notice:', error);
+    }
+  };
+
+  const handleViewNotice = async (notice: Notice) => {
+    setSelectedNotice(notice);
+    setShowNoticeModal(true);
+    // Increment view count
+    try {
+      await updateDoc(doc(db, 'notices', notice.id), {
+        viewCount: increment(1),
+      });
+    } catch (error) {
+      console.error('Error updating view count:', error);
+    }
+  };
+
+  const handleEditNotice = async () => {
+    if (!editNotice.title || !editNotice.content) return;
+    try {
+      await updateDoc(doc(db, 'notices', editNotice.id), {
+        title: editNotice.title,
+        content: editNotice.content,
+      });
+      setShowEditNotice(false);
+      setShowNoticeModal(false);
+      setSelectedNotice(null);
+      loadNotices();
+    } catch (error) {
+      console.error('Error editing notice:', error);
+    }
+  };
+
+  const handleDeleteNotice = async () => {
+    if (!deleteNoticeId) return;
+    try {
+      await deleteDoc(doc(db, 'notices', deleteNoticeId));
+      setShowDeleteNoticeConfirm(false);
+      setDeleteNoticeId('');
+      setShowNoticeModal(false);
+      setSelectedNotice(null);
+      loadNotices();
+    } catch (error) {
+      console.error('Error deleting notice:', error);
+    }
+  };
+
+  // --- Manual Handlers ---
+  const handleCreateManual = async () => {
+    if (!newManual.title || !newManual.content || !userProfile) return;
+    setIsUploading(true);
+
+    try {
+      let fileUrl = '';
+      let fileName = '';
+
+      if (manualFile) {
+        const storageRef = ref(storage, `manuals/${Date.now()}_${manualFile.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, manualFile);
+
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            },
+            (error) => reject(error),
+            async () => {
+              fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              fileName = manualFile.name;
+              resolve();
+            }
+          );
+        });
+      }
+
+      await addDoc(collection(db, 'manuals'), {
+        category: newManual.category,
+        title: newManual.title,
+        content: newManual.content,
+        imageUrl: newManual.imageUrl || '',
+        videoUrl: newManual.videoUrl || '',
+        fileUrl,
+        fileName,
+        author: userProfile.name,
+        createdAt: Timestamp.now(),
+        viewCount: 0,
+      });
+
+      setNewManual({ category: Category.RECIPE, title: '', content: '', imageUrl: '', videoUrl: '' });
+      setManualFile(null);
+      setUploadProgress(0);
+      setShowCreateManual(false);
+      loadManualItems();
+    } catch (error) {
+      console.error('Error creating manual:', error);
+    }
+    setIsUploading(false);
+  };
+
+  const handleViewManual = async (item: ManualItem) => {
+    setSelectedManual(item);
+    try {
+      await updateDoc(doc(db, 'manuals', item.id), {
+        viewCount: increment(1),
+      });
+    } catch (error) {
+      console.error('Error updating view count:', error);
+    }
+  };
+
+  const handleEditManual = async () => {
+    if (!editManual.title || !editManual.content) return;
+    try {
+      await updateDoc(doc(db, 'manuals', editManual.id), {
+        title: editManual.title,
+        content: editManual.content,
+        category: editManual.category,
+        imageUrl: editManual.imageUrl || '',
+        videoUrl: editManual.videoUrl || '',
+      });
+      setShowEditManual(false);
+      setSelectedManual(null);
+      loadManualItems();
+    } catch (error) {
+      console.error('Error editing manual:', error);
+    }
+  };
+
+  const handleDeleteManual = async () => {
+    if (!deleteManualId) return;
+    try {
+      await deleteDoc(doc(db, 'manuals', deleteManualId));
+      setShowDeleteManualConfirm(false);
+      setDeleteManualId('');
+      setSelectedManual(null);
+      loadManualItems();
+    } catch (error) {
+      console.error('Error deleting manual:', error);
+    }
+  };
+
+  // --- Q&A Chat Handler ---
+  const handleQaSubmit = async () => {
+    if (!qaInput.trim()) return;
+    const userMessage = qaInput.trim();
+    setQaMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setQaInput('');
+    setQaLoading(true);
+
+    try {
+      let apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || '';
+      if (!apiKey) {
+        try {
+          const configRes = await fetch('/api/config');
+          const configData = await configRes.json();
+          apiKey = configData.geminiApiKey || '';
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!apiKey) {
+        setQaMessages(prev => [...prev, { role: 'assistant', content: 'API 키가 설정되지 않았습니다. 관리자에게 문의해 주세요.' }]);
+        setQaLoading(false);
+        return;
+      }
+
+      // Load knowledge base for context
+      let kbContext = '';
+      try {
+        const kbSnapshot = await getDocs(collection(db, 'knowledge_base'));
+        const kbItems = kbSnapshot.docs.map(d => d.data());
+        if (kbItems.length > 0) {
+          kbContext = '\n\n[참고 지식베이스]\n' + kbItems.map(item => `Q: ${item.question}\nA: ${item.answer}`).join('\n\n');
+        }
+      } catch {
+        // ignore KB load error
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const systemInstruction = `당신은 '선비칼국수'의 본사 자동 응답기입니다. 점주님들의 질문에 친절하고 전문적으로 답변해 주세요.
+
+주요 안내사항:
+- 선비칼국수는 한국의 칼국수 전문 프랜차이즈입니다.
+- 본사 운영시간: 평일 09:00~18:00
+- 긴급 문의는 SOS 버튼을 이용해 주세요.
+- A/S 관련 문의는 A/S 연락처를 확인해 주세요.
+
+답변 규칙:
+1. 정확하지 않은 정보는 "본사에 확인이 필요합니다"라고 안내하세요.
+2. 긴급하거나 복잡한 문의는 답변 마지막에 [ESCALATE]를 붙여주세요.
+3. 항상 존댓말을 사용하세요.
+4. 간결하고 명확하게 답변하세요.${kbContext}`;
+
+      const chatHistory = qaMessages.map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'model' as const,
+        parts: [{ text: m.content }],
+      }));
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-05-20',
+        contents: [
+          ...chatHistory,
+          { role: 'user', parts: [{ text: userMessage }] }
+        ],
+        config: {
+          systemInstruction,
+        },
+      });
+
+      const assistantMessage = response.text || '죄송합니다. 응답을 생성하지 못했습니다.';
+      setQaMessages(prev => [...prev, { role: 'assistant', content: assistantMessage }]);
+    } catch (error) {
+      console.error('Q&A Error:', error);
+      setQaMessages(prev => [...prev, { role: 'assistant', content: '오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' }]);
+    }
+    setQaLoading(false);
+  };
+
+  // --- User Management Handler ---
+  const handleCreateUser = async () => {
+    if (!createUserForm.email || !createUserForm.password || !createUserForm.name) return;
+    setCreateUserLoading(true);
+    setCreateUserError('');
+    try {
+      const response = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: createUserForm.email,
+          password: createUserForm.password,
+          name: createUserForm.name,
+          role: createUserForm.role,
+          storeName: createUserForm.storeName,
+          position: createUserForm.position || (createUserForm.role === 'owner' ? '점주' : '직원'),
+          adminUid: user?.uid,
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || '계정 생성에 실패했습니다.');
+      }
+      setCreateUserForm({ email: '', password: '', name: '', role: 'owner', storeName: '', position: '' });
+      loadAllUsers();
+    } catch (error: any) {
+      setCreateUserError(error.message || '계정 생성 중 오류가 발생했습니다.');
+    }
+    setCreateUserLoading(false);
+  };
+
+  // --- KB Management Handlers ---
+  const handleKbAddEntry = async () => {
+    if (!kbNewEntry.question || !kbNewEntry.answer) return;
+    try {
+      await addDoc(collection(db, 'knowledge_base'), {
+        question: kbNewEntry.question,
+        answer: kbNewEntry.answer,
+        category: kbNewEntry.category || '일반',
+        createdAt: Timestamp.now(),
+      });
+      setKbNewEntry({ question: '', answer: '', category: '' });
+      setKbUploadResult('지식베이스에 항목이 추가되었습니다.');
+    } catch (error) {
+      console.error('Error adding KB entry:', error);
+    }
+  };
+
+  const handleKbCsvUpload = async () => {
+    if (!kbCsvFile) return;
+    setKbUploadLoading(true);
+    setKbUploadResult('');
+
+    try {
+      const text = await kbCsvFile.text();
+      Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          let count = 0;
+          for (const row of results.data as any[]) {
+            if (row.question && row.answer) {
+              await addDoc(collection(db, 'knowledge_base'), {
+                question: row.question,
+                answer: row.answer,
+                category: row.category || '일반',
+                createdAt: Timestamp.now(),
+              });
+              count++;
+            }
+          }
+          setKbUploadResult(`${count}개의 항목이 업로드되었습니다.`);
+          setKbCsvFile(null);
+          setKbUploadLoading(false);
+        },
+        error: (error: any) => {
+          setKbUploadResult('CSV 파일 파싱에 실패했습니다.');
+          setKbUploadLoading(false);
+        }
+      });
+    } catch (error) {
+      setKbUploadResult('파일 읽기에 실패했습니다.');
+      setKbUploadLoading(false);
+    }
+  };
+
+  // --- Helper ---
+  const formatDate = (timestamp: Timestamp) => {
+    if (!timestamp?.toDate) return '';
+    const date = timestamp.toDate();
+    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const isManager = userProfile?.role === 'manager';
+
+  const getCategoryIcon = (category: Category) => {
+    switch (category) {
+      case Category.RECIPE: return <Leaf className="w-5 h-5" />;
+      case Category.VIDEO: return <Video className="w-5 h-5" />;
+      case Category.CHECKLIST: return <ClipboardCheck className="w-5 h-5" />;
+      case Category.DOCUMENT: return <FileText className="w-5 h-5" />;
+      case Category.IMAGE: return <ImageIcon className="w-5 h-5" />;
+    }
+  };
+
+  const filteredManuals = manualItems.filter(item => {
+    const matchesCategory = !selectedCategory || item.category === selectedCategory;
+    const matchesSearch = !searchQuery ||
+      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.content.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const filteredPosts = consultingPosts.filter(post => {
+    if (consultingFilter === 'all') return true;
+    if (consultingFilter === 'pending') return post.status === 'pending';
+    if (consultingFilter === 'answered') return post.status === 'answered';
+    if (consultingFilter === 'mine') return post.authorUid === user?.uid;
+    return post.category === consultingFilter;
+  });
+
+  // --- Loading Screen ---
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-amber-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-primary font-bold">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Login / Sign Up Page ---
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-primary flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <div className="text-center mb-10">
+            <h1 className="text-4xl font-bold text-white mb-6 tracking-widest flex items-center justify-center gap-2">
+              선비칼국수
+              <div className="inline-flex items-center justify-center w-14 h-14 border-2 border-white rounded-full">
+                <Leaf className="w-8 h-8 text-white" />
+              </div>
+            </h1>
+            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">점주 파트너 센터</h2>
+            <p className="text-accent font-bold text-sm tracking-widest">SUNBI KALGUKSU PARTNER</p>
+          </div>
+
+          <div className="w-full">
+            {!isSignUp ? (
+              <form onSubmit={handleLogin} className="space-y-6">
+                {authError && (
+                  <div className="bg-red-500/20 text-red-100 border border-red-500/50 p-3 rounded-lg text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {authError}
+                  </div>
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">이메일 주소</label>
+                    <input
+                      type="email"
+                      value={loginForm.email}
+                      onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      placeholder="이메일을 입력하세요"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">비밀번호</label>
+                    <input
+                      type="password"
+                      value={loginForm.password}
+                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      placeholder="비밀번호를 입력하세요"
+                      required
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-accent text-primary py-4 rounded-xl font-bold text-lg hover:bg-yellow-300 transition-colors disabled:opacity-50 mt-2 shadow-lg"
+                >
+                  {authLoading ? '로그인 중...' : '로그인하기'}
+                </button>
+                
+                <div className="flex items-center justify-center gap-4 text-xs font-bold text-white/70 mt-8 tracking-wide">
+                  <button type="button" className="hover:text-white transition-colors">아이디 찾기</button>
+                  <span className="text-white/30">|</span>
+                  <button type="button" className="hover:text-white transition-colors">비밀번호 재설정</button>
+                  <span className="text-white/30">|</span>
+                  <button type="button" onClick={() => { setIsSignUp(true); setAuthError(''); }} className="text-accent hover:text-yellow-300 transition-colors">회원가입</button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleSignUp} className="space-y-6">
+                <h2 className="text-xl font-bold text-white mb-2 text-center">점주 파트너 가입</h2>
+                {authError && (
+                  <div className="bg-red-500/20 text-red-100 border border-red-500/50 p-3 rounded-lg text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {authError}
+                  </div>
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">이메일 주소</label>
+                    <input
+                      type="email"
+                      value={signUpForm.email}
+                      onChange={(e) => setSignUpForm({ ...signUpForm, email: e.target.value })}
+                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      placeholder="이메일을 입력하세요"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">비밀번호</label>
+                    <input
+                      type="password"
+                      value={signUpForm.password}
+                      onChange={(e) => setSignUpForm({ ...signUpForm, password: e.target.value })}
+                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      placeholder="6자 이상"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">이름</label>
+                    <input
+                      type="text"
+                      value={signUpForm.name}
+                      onChange={(e) => setSignUpForm({ ...signUpForm, name: e.target.value })}
+                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      placeholder="이름을 입력하세요"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">가맹점명</label>
+                    <input
+                      type="text"
+                      value={signUpForm.storeName}
+                      onChange={(e) => setSignUpForm({ ...signUpForm, storeName: e.target.value })}
+                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      placeholder="가맹점명을 입력하세요"
+                      required
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-accent text-primary py-4 rounded-xl font-bold text-lg hover:bg-yellow-300 transition-colors disabled:opacity-50 mt-2 shadow-lg"
+                >
+                  {authLoading ? '가입 중...' : '회원가입하기'}
+                </button>
+                <div className="text-center mt-6">
+                  <button type="button" onClick={() => { setIsSignUp(false); setAuthError(''); }} className="text-sm font-bold text-white/60 hover:text-white transition-colors">
+                    뒤로 로그인으로
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // --- Main App ---
+  return (
+    <div className="min-h-screen bg-primary">
+      {/* Header */}
+      <header className="bg-primary/95 backdrop-blur-sm sticky top-0 z-40 border-b-4 border-brand-green">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-white">
+              <Leaf className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-lg font-bold text-white tracking-widest hidden sm:block">선비칼국수</h1>
+            <span className="text-white/60 text-xs ml-2 hidden sm:block">|</span>
+            <span className="text-white text-xs font-bold ml-1 sm:ml-0">{userProfile?.storeName} {userProfile?.name} {userProfile?.position}</span>
+          </div>
+          <div className="flex items-center gap-3">
+             <button onClick={handleLogout} className="text-xs text-primary font-bold bg-accent hover:bg-yellow-400 px-4 py-1.5 rounded-full transition-colors shadow-sm">
+              로그아웃
+             </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        <AnimatePresence mode="wait">
+          {/* ===== HOME TAB ===== */}
+          {activeTab === 'home' && (
+            <motion.div
+              key="home"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-4"
+            >
+              {/* Welcome Banner */}
+              <div className="bg-gradient-to-br from-[#FDFBEA] to-[#F2F7E1] rounded-2xl p-6 shadow-sm">
+                <p className="text-brand-green font-bold text-xs mb-1">본사 파트너 센터</p>
+                <h2 className="text-2xl font-bold text-[#5c4a40] mb-2 leading-tight">
+                  <span className="text-brand-green">{userProfile?.name} {userProfile?.position}님</span><br/>
+                  반갑습니다.
+                </h2>
+                <p className="text-[#5c4a40]/70 text-sm">
+                  본사 임직원 전용 관리 모드입니다. 매장 지원 및 관리에 만전을 기해 주시기 바랍니다.
+                </p>
+              </div>
+
+              {/* Quick Actions (Two big yellow buttons) */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setActiveTab('consulting')}
+                  className="bg-accent text-primary p-5 rounded-2xl text-center hover:bg-yellow-400 transition-colors shadow-sm flex flex-col items-center justify-center gap-2"
+                >
+                  <MessageSquare className="w-6 h-6 text-primary/70" />
+                  <div>
+                    <p className="font-bold text-sm">SV 1:1 문의</p>
+                    <p className="text-[10px] text-primary/60">(담당자 연결)</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setShowAsContacts(true)}
+                  className="bg-accent text-primary p-5 rounded-2xl text-center hover:bg-yellow-400 transition-colors shadow-sm flex flex-col items-center justify-center gap-2"
+                >
+                  <Phone className="w-6 h-6 text-primary/70" />
+                  <div>
+                    <p className="font-bold text-sm">A/S 문의</p>
+                    <p className="text-[10px] text-primary/60">(비상연락망)</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Notices Section */}
+              <div className="bg-white rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <h3 className="text-lg font-bold text-primary flex items-center gap-2 mr-2">
+                    <Bell className="w-5 h-5 text-gray-400" />
+                    본사 공지사항
+                  </h3>
+                  {isManager && (
+                    <div className="flex gap-2 flex-wrap">
+                      <button onClick={() => setShowBusinessReg(true)} className="bg-accent px-3 py-1 text-xs font-bold rounded-full text-primary hover:bg-yellow-400 transition">사업자 등록</button>
+                      <button onClick={() => setShowCreateNotice(true)} className="bg-accent px-3 py-1 text-xs font-bold rounded-full text-primary hover:bg-yellow-400 transition">공지 작성</button>
+                      <button onClick={() => setShowKbManagement(true)} className="bg-brand-green text-white px-3 py-1 text-xs font-bold rounded-full hover:bg-green-600 transition">Q&A 정보 등록</button>
+                      <button onClick={() => { setShowUserManagement(true); loadAllUsers(); }} className="bg-[#4a3a32] text-white px-3 py-1 text-xs font-bold rounded-full flex gap-1 items-center hover:bg-primary transition"><Users className="w-3 h-3"/>계정 관리</button>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {notices.length === 0 ? (
+                    <p className="text-primary/40 text-sm text-center py-6">등록된 공지사항이 없습니다.</p>
+                  ) : (
+                    notices.slice(0, 5).map(notice => (
+                      <button
+                        key={notice.id}
+                        onClick={() => handleViewNotice(notice)}
+                        className="w-full bg-gray-50 p-3 rounded-xl text-left hover:bg-gray-100 transition-colors flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-primary text-sm">{notice.title}</p>
+                          <p className="text-xs text-primary/40 mt-1">{formatDate(notice.createdAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-primary/30">
+                          <span className="text-xs flex items-center gap-1"><Eye className="w-3 h-3" />{notice.viewCount || 0}</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Manual Grid */}
+              <div>
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2 px-1">
+                   📚 선비칼국수 매뉴얼
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                   <button onClick={() => { setSelectedCategory(Category.RECIPE); document.getElementById('manual-search')?.scrollIntoView({behavior: 'smooth'}); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                     <FileText className="w-7 h-7 text-brand-green" />
+                     <span className="font-bold text-sm text-primary">조리 매뉴얼</span>
+                   </button>
+                   <button onClick={() => { setSelectedCategory(Category.VIDEO); document.getElementById('manual-search')?.scrollIntoView({behavior: 'smooth'}); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                     <PlayCircle className="w-7 h-7 text-brand-green" />
+                     <span className="font-bold text-sm text-primary">영상</span>
+                   </button>
+                   <button onClick={() => { setShowQaChat(true); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                     <ClipboardCheck className="w-7 h-7 text-brand-green" />
+                     <span className="font-bold text-sm text-primary">선비칼국수 Q/A</span>
+                   </button>
+                   <button onClick={() => { setSelectedCategory(Category.CHECKLIST); document.getElementById('manual-search')?.scrollIntoView({behavior: 'smooth'}); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                     <Upload className="w-7 h-7 text-brand-green" />
+                     <span className="font-bold text-sm text-primary">체크리스트 업로드</span>
+                   </button>
+                </div>
+
+                {/* Sub-search section for manuals (hidden until scrolled to) */}
+                <div id="manual-search" className="mt-6 bg-white/5 p-4 rounded-2xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-bold text-white">매뉴얼 목록</h4>
+                    {isManager && (
+                      <button onClick={() => setShowCreateManual(true)} className="text-xs text-brand-green flex items-center gap-1 font-bold bg-brand-green/10 px-2 py-1 rounded-md">
+                        <Plus className="w-3 h-3" /> 작성
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/40" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="검색..."
+                      className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border-0 focus:ring-2 focus:ring-accent text-sm text-primary font-bold"
+                    />
+                  </div>
+                  <div className="flex gap-2 mb-3 overflow-x-auto pb-1 no-scrollbar">
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${!selectedCategory ? 'bg-brand-green text-white' : 'bg-white/20 text-white hover:bg-white/30'}`}
+                    >전체</button>
+                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => setSelectedCategory(key as Category)}
+                        className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedCategory === key ? 'bg-brand-green text-white' : 'bg-white/20 text-white hover:bg-white/30'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                     {filteredManuals.length === 0 ? (
+                       <p className="col-span-2 text-white/40 text-xs text-center py-4 font-bold">등록된 매뉴얼이 없습니다.</p>
+                     ) : (
+                       filteredManuals.map(item => (
+                         <button key={item.id} onClick={() => handleViewManual(item)} className="bg-white p-3 rounded-xl text-left shadow-sm flex flex-col justify-between hover:bg-gray-50 transition-colors">
+                            <div className="text-xs font-bold text-brand-green mb-1">{CATEGORY_LABELS[item.category]}</div>
+                            <p className="text-sm font-bold text-primary line-clamp-2 leading-tight">{item.title}</p>
+                         </button>
+                       ))
+                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Branch Map Section (Matches the bottom image) */}
+              <div className="mt-4">
+                <div className="bg-[#FDFBEA] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-full bg-accent flex flex-col items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5 text-primary" />
+                     </div>
+                     <div>
+                       <p className="text-[10px] text-primary/60 font-bold mb-0.5">전국 지점 안내</p>
+                       <p className="text-base font-bold text-primary leading-none">지점 리스트 보기</p>
+                     </div>
+                  </div>
+                  <button onClick={() => setShowMap(true)} className="bg-accent px-4 py-2 rounded-xl text-sm font-bold text-primary shadow-sm hover:bg-yellow-400 shrink-0">
+                    지도 보기
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ===== CONSULTING TAB ===== */}
+          {activeTab === 'consulting' && (
+            <motion.div
+              key="consulting"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-primary">1:1 문의</h2>
+                <button
+                  onClick={() => setShowCreatePost(true)}
+                  className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1 hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  문의하기
+                </button>
+              </div>
+
+              {/* Filter */}
+              <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+                {[
+                  { key: 'all', label: '전체' },
+                  { key: 'pending', label: '대기중' },
+                  { key: 'answered', label: '답변완료' },
+                  { key: 'mine', label: '내 문의' },
+                ].map(filter => (
+                  <button
+                    key={filter.key}
+                    onClick={() => setConsultingFilter(filter.key)}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      consultingFilter === filter.key ? 'bg-primary text-white' : 'bg-white text-primary/60 hover:bg-primary/10'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Posts List */}
+              <div className="space-y-3">
+                {filteredPosts.length === 0 ? (
+                  <p className="text-primary/40 text-sm text-center py-8">문의 내역이 없습니다.</p>
+                ) : (
+                  filteredPosts.map(post => (
+                    <button
+                      key={post.id}
+                      onClick={() => setSelectedPost(post)}
+                      className="w-full bg-white p-4 rounded-xl text-left hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          post.status === 'answered' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {post.status === 'answered' ? '답변완료' : '대기중'}
+                        </span>
+                        <span className="text-xs text-primary/40 bg-primary/5 px-2 py-0.5 rounded-full">{post.category}</span>
+                      </div>
+                      <p className="font-medium text-primary">{post.title}</p>
+                      <div className="flex items-center gap-2 mt-2 text-xs text-primary/40">
+                        <span>{post.storeName} - {post.author}</span>
+                        <span>{formatDate(post.createdAt)}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* ===== MODALS ===== */}
+
+      {/* Post Detail Modal */}
+      <AnimatePresence>
+        {selectedPost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setSelectedPost(null)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      selectedPost.status === 'answered' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {selectedPost.status === 'answered' ? '답변완료' : '대기중'}
+                    </span>
+                    <span className="text-xs text-primary/40">{selectedPost.category}</span>
+                  </div>
+                  <button onClick={() => setSelectedPost(null)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <h3 className="text-lg font-bold text-primary mb-2">{selectedPost.title}</h3>
+                <p className="text-xs text-primary/40 mb-4">{selectedPost.storeName} - {selectedPost.author} | {formatDate(selectedPost.createdAt)}</p>
+                <div className="bg-amber-50 p-4 rounded-xl mb-4">
+                  <p className="text-sm text-primary whitespace-pre-wrap">{selectedPost.content}</p>
+                </div>
+
+                {selectedPost.answer && (
+                  <div className="bg-green-50 p-4 rounded-xl mb-4">
+                    <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      답변 ({selectedPost.answeredBy} | {selectedPost.answeredAt && formatDate(selectedPost.answeredAt)})
+                    </p>
+                    <p className="text-sm text-green-900 whitespace-pre-wrap">{selectedPost.answer}</p>
+                  </div>
+                )}
+
+                {/* Manager: Answer Form */}
+                {isManager && selectedPost.status === 'pending' && (
+                  <div className="mt-4">
+                    <textarea
+                      value={answerText}
+                      onChange={(e) => setAnswerText(e.target.value)}
+                      placeholder="답변을 입력하세요..."
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[100px]"
+                    />
+                    <button
+                      onClick={() => handleAnswerPost(selectedPost.id)}
+                      className="mt-2 bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-700 transition-colors w-full"
+                    >
+                      답변 등록
+                    </button>
+                  </div>
+                )}
+
+                {/* Delete button for manager or post author */}
+                {(isManager || selectedPost.authorUid === user?.uid) && (
+                  <button
+                    onClick={() => handleDeletePost(selectedPost.id)}
+                    className="mt-3 text-[#5d4037]/70 text-sm flex items-center gap-1 hover:text-[#5d4037]"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    삭제
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Post Modal */}
+      <AnimatePresence>
+        {showCreatePost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowCreatePost(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">1:1 문의하기</h3>
+                  <button onClick={() => setShowCreatePost(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">카테고리</label>
+                    <select
+                      value={newPost.category}
+                      onChange={(e) => setNewPost({ ...newPost, category: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    >
+                      <option value="운영">운영</option>
+                      <option value="식재료">식재료</option>
+                      <option value="시설/설비">시설/설비</option>
+                      <option value="인사/노무">인사/노무</option>
+                      <option value="마케팅">마케팅</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={newPost.title}
+                      onChange={(e) => setNewPost({ ...newPost, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="제목을 입력하세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">내용</label>
+                    <textarea
+                      value={newPost.content}
+                      onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[120px]"
+                      placeholder="문의 내용을 입력하세요"
+                    />
+                  </div>
+                  <button
+                    onClick={handleCreatePost}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                  >
+                    문의 등록
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Notice Detail Modal */}
+      <AnimatePresence>
+        {showNoticeModal && selectedNotice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => { setShowNoticeModal(false); setSelectedNotice(null); }}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">{selectedNotice.title}</h3>
+                  <button onClick={() => { setShowNoticeModal(false); setSelectedNotice(null); }}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <p className="text-xs text-primary/40 mb-4">{selectedNotice.author} | {formatDate(selectedNotice.createdAt)} | 조회 {selectedNotice.viewCount || 0}</p>
+                <div className="bg-amber-50 p-4 rounded-xl">
+                  <p className="text-sm text-primary whitespace-pre-wrap">{selectedNotice.content}</p>
+                </div>
+
+                {isManager && (
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => {
+                        setEditNotice({ id: selectedNotice.id, title: selectedNotice.title, content: selectedNotice.content });
+                        setShowEditNotice(true);
+                      }}
+                      className="flex items-center gap-1 text-sm text-primary/60 hover:text-primary"
+                    >
+                      <Edit className="w-4 h-4" />
+                      수정
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDeleteNoticeId(selectedNotice.id);
+                        setShowDeleteNoticeConfirm(true);
+                      }}
+                      className="flex items-center gap-1 text-sm text-[#5d4037]/70 hover:text-[#5d4037]"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      삭제
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Notice Modal */}
+      <AnimatePresence>
+        {showCreateNotice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowCreateNotice(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">공지사항 작성</h3>
+                  <button onClick={() => setShowCreateNotice(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={newNotice.title}
+                      onChange={(e) => setNewNotice({ ...newNotice, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="제목을 입력하세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">내용</label>
+                    <textarea
+                      value={newNotice.content}
+                      onChange={(e) => setNewNotice({ ...newNotice, content: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[150px]"
+                      placeholder="내용을 입력하세요"
+                    />
+                  </div>
+                  <button
+                    onClick={handleCreateNotice}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                  >
+                    등록
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Notice Modal */}
+      <AnimatePresence>
+        {showEditNotice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowEditNotice(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">공지사항 수정</h3>
+                  <button onClick={() => setShowEditNotice(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={editNotice.title}
+                      onChange={(e) => setEditNotice({ ...editNotice, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">내용</label>
+                    <textarea
+                      value={editNotice.content}
+                      onChange={(e) => setEditNotice({ ...editNotice, content: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[150px]"
+                    />
+                  </div>
+                  <button
+                    onClick={handleEditNotice}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                  >
+                    수정 완료
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Notice Confirm Modal */}
+      <AnimatePresence>
+        {showDeleteNoticeConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowDeleteNoticeConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              className="bg-white rounded-2xl p-6 w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-primary mb-2">공지사항 삭제</h3>
+              <p className="text-sm text-primary/60 mb-4">정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowDeleteNoticeConfirm(false)}
+                  className="flex-1 py-2 rounded-xl border border-primary/20 text-sm font-medium text-primary/60 hover:bg-primary/5"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDeleteNotice}
+                  className="flex-1 py-2 rounded-xl bg-[#5d4037] text-white text-sm font-medium hover:bg-[#4e342e]"
+                >
+                  삭제
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Business Registration Modal */}
+      <AnimatePresence>
+        {showBusinessReg && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowBusinessReg(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">사업자 등록</h3>
+                  <button onClick={() => setShowBusinessReg(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">상호명</label>
+                    <input
+                      type="text"
+                      value={businessRegForm.businessName}
+                      onChange={(e) => setBusinessRegForm({ ...businessRegForm, businessName: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="상호명"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">대표자명</label>
+                    <input
+                      type="text"
+                      value={businessRegForm.ownerName}
+                      onChange={(e) => setBusinessRegForm({ ...businessRegForm, ownerName: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="대표자명"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">사업자등록번호</label>
+                    <input
+                      type="text"
+                      value={businessRegForm.businessNumber}
+                      onChange={(e) => setBusinessRegForm({ ...businessRegForm, businessNumber: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="000-00-00000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">주소</label>
+                    <input
+                      type="text"
+                      value={businessRegForm.address}
+                      onChange={(e) => setBusinessRegForm({ ...businessRegForm, address: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="사업장 주소"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">연락처</label>
+                    <input
+                      type="tel"
+                      value={businessRegForm.phone}
+                      onChange={(e) => setBusinessRegForm({ ...businessRegForm, phone: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="010-0000-0000"
+                    />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await addDoc(collection(db, 'business_registrations'), {
+                          ...businessRegForm,
+                          createdAt: Timestamp.now(),
+                          registeredBy: userProfile?.name,
+                        });
+                        setBusinessRegForm({ businessName: '', ownerName: '', businessNumber: '', address: '', phone: '' });
+                        setShowBusinessReg(false);
+                        alert('사업자 등록이 완료되었습니다.');
+                      } catch (error) {
+                        console.error('Error registering business:', error);
+                      }
+                    }}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                  >
+                    등록
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Map Modal */}
+      <AnimatePresence>
+        {showMap && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowMap(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-2xl h-[70vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 flex items-center justify-between border-b">
+                <h3 className="text-lg font-bold text-primary flex items-center gap-2">
+                  <MapPin className="w-5 h-5" />
+                  가맹점 지도 ({BRANCHES.length}개)
+                </h3>
+                <button onClick={() => setShowMap(false)}>
+                  <X className="w-5 h-5 text-primary/40" />
+                </button>
+              </div>
+              <div className="flex-1">
+                <MapContainer
+                  center={[37.5050, 127.0500]}
+                  zoom={12}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {BRANCHES.map((branch, index) => (
+                    <Marker key={index} position={[branch.lat, branch.lng]}>
+                      <Popup>
+                        <strong>선비칼국수 {branch.name}</strong>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SOS Modal */}
+      <AnimatePresence>
+        {showSosModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowSosModal(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-[#5d4037]/70 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    SOS 긴급문의
+                  </h3>
+                  <button onClick={() => setShowSosModal(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+
+                {sosSuccess ? (
+                  <div className="text-center py-8">
+                    <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                    <p className="text-lg font-bold text-primary">접수되었습니다!</p>
+                    <p className="text-sm text-primary/60 mt-2">슈퍼바이저가 곧 연락드리겠습니다.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-primary/60 bg-red-50 p-3 rounded-xl">
+                      긴급한 상황을 슈퍼바이저에게 바로 전달합니다. 접수 후 빠르게 연락드리겠습니다.
+                    </p>
+                    <div>
+                      <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                      <input
+                        type="text"
+                        value={sosForm.title}
+                        onChange={(e) => setSosForm({ ...sosForm, title: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-[#ffeb3b] text-sm"
+                        placeholder="긴급 상황을 간단히 입력"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-primary/70 mb-1">상세 내용</label>
+                      <textarea
+                        value={sosForm.message}
+                        onChange={(e) => setSosForm({ ...sosForm, message: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-[#ffeb3b] text-sm min-h-[100px]"
+                        placeholder="상황을 자세히 설명해 주세요"
+                      />
+                    </div>
+                    <button
+                      onClick={handleSosSubmit}
+                      disabled={sosLoading || !sosForm.title || !sosForm.message}
+                      className="w-full bg-[#5d4037] text-white py-3 rounded-xl font-bold hover:bg-[#4e342e] transition-colors disabled:opacity-50"
+                    >
+                      {sosLoading ? '전송 중...' : '긴급 문의 접수'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* A/S Contacts Modal */}
+      <AnimatePresence>
+        {showAsContacts && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowAsContacts(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary flex items-center gap-2">
+                    <Phone className="w-5 h-5" />
+                    A/S 연락처
+                  </h3>
+                  <button onClick={() => setShowAsContacts(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { label: '포스기 (POS)', phone: '010-5448-2724', desc: 'POS 시스템 관련 문의' },
+                    { label: '주방설비', phone: '010-9275-0977', desc: '주방 장비 수리/점검' },
+                    { label: '인테리어', phone: '010-9851-8451', desc: '매장 인테리어/시설' },
+                  ].map((contact, index) => (
+                    <a
+                      key={index}
+                      href={`tel:${contact.phone}`}
+                      className="flex items-center gap-4 bg-amber-50 p-4 rounded-xl hover:bg-amber-100 transition-colors"
+                    >
+                      <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center shrink-0">
+                        <Phone className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-primary">{contact.label}</p>
+                        <p className="text-sm text-primary/60">{contact.desc}</p>
+                      </div>
+                      <p className="text-sm font-bold text-primary">{contact.phone}</p>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Manual Viewer Modal */}
+      <AnimatePresence>
+        {selectedManual && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setSelectedManual(null)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-primary/60">
+                    {getCategoryIcon(selectedManual.category)}
+                    <span className="text-sm">{CATEGORY_LABELS[selectedManual.category]}</span>
+                  </div>
+                  <button onClick={() => setSelectedManual(null)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+
+                <h3 className="text-lg font-bold text-primary mb-2">{selectedManual.title}</h3>
+                <p className="text-xs text-primary/40 mb-4">
+                  {selectedManual.author} | {formatDate(selectedManual.createdAt)} | 조회 {selectedManual.viewCount || 0}
+                </p>
+
+                {/* Image */}
+                {selectedManual.imageUrl && (
+                  <div className="mb-4">
+                    <img src={selectedManual.imageUrl} alt={selectedManual.title} className="w-full rounded-xl" />
+                  </div>
+                )}
+
+                {/* Video */}
+                {selectedManual.videoUrl && (
+                  <div className="mb-4">
+                    {selectedManual.videoUrl.includes('youtube.com') || selectedManual.videoUrl.includes('youtu.be') ? (
+                      <div className="aspect-video rounded-xl overflow-hidden">
+                        <iframe
+                          src={selectedManual.videoUrl.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
+                          className="w-full h-full"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <video src={selectedManual.videoUrl} controls className="w-full rounded-xl" />
+                    )}
+                  </div>
+                )}
+
+                {/* File Download */}
+                {selectedManual.fileUrl && (
+                  <a
+                    href={selectedManual.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-amber-50 p-3 rounded-xl mb-4 hover:bg-amber-100 transition-colors"
+                  >
+                    <Download className="w-5 h-5 text-primary" />
+                    <span className="text-sm font-medium text-primary">{selectedManual.fileName || '파일 다운로드'}</span>
+                  </a>
+                )}
+
+                {/* Content */}
+                <div className="bg-amber-50 p-4 rounded-xl">
+                  <div className="text-sm text-primary whitespace-pre-wrap markdown-body">
+                    <Markdown>{selectedManual.content}</Markdown>
+                  </div>
+                </div>
+
+                {/* Manager Actions */}
+                {isManager && (
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => {
+                        setEditManual({
+                          id: selectedManual.id,
+                          category: selectedManual.category,
+                          title: selectedManual.title,
+                          content: selectedManual.content,
+                          imageUrl: selectedManual.imageUrl || '',
+                          videoUrl: selectedManual.videoUrl || '',
+                        });
+                        setShowEditManual(true);
+                      }}
+                      className="flex items-center gap-1 text-sm text-primary/60 hover:text-primary"
+                    >
+                      <Edit className="w-4 h-4" />
+                      수정
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDeleteManualId(selectedManual.id);
+                        setShowDeleteManualConfirm(true);
+                      }}
+                      className="flex items-center gap-1 text-sm text-[#5d4037]/70 hover:text-[#5d4037]"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      삭제
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Manual Modal */}
+      <AnimatePresence>
+        {showCreateManual && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowCreateManual(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">매뉴얼 작성</h3>
+                  <button onClick={() => setShowCreateManual(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">카테고리</label>
+                    <select
+                      value={newManual.category}
+                      onChange={(e) => setNewManual({ ...newManual, category: e.target.value as Category })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    >
+                      {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={newManual.title}
+                      onChange={(e) => setNewManual({ ...newManual, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="제목을 입력하세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">내용 (마크다운 지원)</label>
+                    <textarea
+                      value={newManual.content}
+                      onChange={(e) => setNewManual({ ...newManual, content: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[150px] font-mono"
+                      placeholder="내용을 입력하세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">이미지 URL (선택)</label>
+                    <input
+                      type="url"
+                      value={newManual.imageUrl}
+                      onChange={(e) => setNewManual({ ...newManual, imageUrl: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">영상 URL (선택)</label>
+                    <input
+                      type="url"
+                      value={newManual.videoUrl}
+                      onChange={(e) => setNewManual({ ...newManual, videoUrl: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      placeholder="YouTube URL 또는 영상 URL"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">파일 첨부 (선택)</label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-primary/30 cursor-pointer hover:bg-amber-50 transition-colors">
+                        <Upload className="w-4 h-4 text-primary/60" />
+                        <span className="text-sm text-primary/60">{manualFile ? manualFile.name : '파일 선택'}</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => setManualFile(e.target.files?.[0] || null)}
+                        />
+                      </label>
+                      {manualFile && (
+                        <button onClick={() => setManualFile(null)} className="text-[#5d4037]/60 hover:text-[#5d4037]/70">
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    {isUploading && (
+                      <div className="mt-2">
+                        <div className="w-full bg-primary/10 rounded-full h-2">
+                          <div
+                            className="bg-primary h-2 rounded-full transition-all"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-primary/40 mt-1">{Math.round(uploadProgress)}% 업로드 중...</p>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleCreateManual}
+                    disabled={isUploading || !newManual.title || !newManual.content}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {isUploading ? '업로드 중...' : '등록'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Manual Modal */}
+      <AnimatePresence>
+        {showEditManual && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowEditManual(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">매뉴얼 수정</h3>
+                  <button onClick={() => setShowEditManual(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">카테고리</label>
+                    <select
+                      value={editManual.category}
+                      onChange={(e) => setEditManual({ ...editManual, category: e.target.value as Category })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    >
+                      {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={editManual.title}
+                      onChange={(e) => setEditManual({ ...editManual, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">내용</label>
+                    <textarea
+                      value={editManual.content}
+                      onChange={(e) => setEditManual({ ...editManual, content: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[150px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">이미지 URL (선택)</label>
+                    <input
+                      type="url"
+                      value={editManual.imageUrl}
+                      onChange={(e) => setEditManual({ ...editManual, imageUrl: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">영상 URL (선택)</label>
+                    <input
+                      type="url"
+                      value={editManual.videoUrl}
+                      onChange={(e) => setEditManual({ ...editManual, videoUrl: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={handleEditManual}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                  >
+                    수정 완료
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Manual Confirm Modal */}
+      <AnimatePresence>
+        {showDeleteManualConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowDeleteManualConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              className="bg-white rounded-2xl p-6 w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-primary mb-2">매뉴얼 삭제</h3>
+              <p className="text-sm text-primary/60 mb-4">정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowDeleteManualConfirm(false)}
+                  className="flex-1 py-2 rounded-xl border border-primary/20 text-sm font-medium text-primary/60 hover:bg-primary/5"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDeleteManual}
+                  className="flex-1 py-2 rounded-xl bg-[#5d4037] text-white text-sm font-medium hover:bg-[#4e342e]"
+                >
+                  삭제
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Q&A Chat Modal */}
+      <AnimatePresence>
+        {showQaChat && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowQaChat(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg h-[80vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Chat Header */}
+              <div className="p-4 border-b flex items-center justify-between">
+                <h3 className="text-lg font-bold text-primary flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  Q&A 챗봇
+                </h3>
+                <button onClick={() => setShowQaChat(false)}>
+                  <X className="w-5 h-5 text-primary/40" />
+                </button>
+              </div>
+
+              {/* Chat Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {qaMessages.length === 0 && (
+                  <div className="text-center py-8">
+                    <Leaf className="w-12 h-12 text-primary/20 mx-auto mb-3" />
+                    <p className="text-primary/40 text-sm">무엇이든 물어보세요!</p>
+                    <p className="text-primary/30 text-xs mt-1">선비칼국수 운영에 관한 궁금한 점을 질문해 주세요.</p>
+                  </div>
+                )}
+                {qaMessages.map((msg, index) => (
+                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] p-3 rounded-xl text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-primary text-white rounded-br-sm'
+                        : 'bg-amber-50 text-primary rounded-bl-sm'
+                    }`}>
+                      {msg.role === 'assistant' ? (
+                        <div className="markdown-body">
+                          <Markdown>{msg.content.replace('[ESCALATE]', '')}</Markdown>
+                          {msg.content.includes('[ESCALATE]') && (
+                            <button
+                              onClick={() => {
+                                setShowQaChat(false);
+                                setShowSosModal(true);
+                              }}
+                              className="mt-2 bg-[#5d4037] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#4e342e] transition-colors flex items-center gap-1"
+                            >
+                              <AlertCircle className="w-3 h-3" />
+                              슈퍼바이저 1:1 문의하기
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <p>{msg.content}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {qaLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-amber-50 p-3 rounded-xl rounded-bl-sm">
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-primary/30 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-2 h-2 bg-primary/30 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-2 h-2 bg-primary/30 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Chat Input */}
+              <div className="p-4 border-t">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={qaInput}
+                    onChange={(e) => setQaInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQaSubmit(); } }}
+                    placeholder="질문을 입력하세요..."
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    disabled={qaLoading}
+                  />
+                  <button
+                    onClick={handleQaSubmit}
+                    disabled={qaLoading || !qaInput.trim()}
+                    className="bg-primary text-white p-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* User Management Modal */}
+      <AnimatePresence>
+        {showUserManagement && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowUserManagement(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    계정 관리
+                  </h3>
+                  <button onClick={() => setShowUserManagement(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+
+                {/* Create User Form */}
+                <div className="bg-amber-50 p-4 rounded-xl mb-4">
+                  <h4 className="font-bold text-primary mb-3">새 계정 생성</h4>
+                  {createUserError && (
+                    <div className="bg-[#5d4037]/10 text-[#5d4037] p-2 rounded-lg mb-3 text-xs flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {createUserError}
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    <input
+                      type="email"
+                      value={createUserForm.email}
+                      onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
+                      placeholder="이메일"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <input
+                      type="password"
+                      value={createUserForm.password}
+                      onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
+                      placeholder="비밀번호 (6자 이상)"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={createUserForm.name}
+                      onChange={(e) => setCreateUserForm({ ...createUserForm, name: e.target.value })}
+                      placeholder="이름"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <select
+                      value={createUserForm.role}
+                      onChange={(e) => setCreateUserForm({ ...createUserForm, role: e.target.value as 'manager' | 'owner' })}
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    >
+                      <option value="owner">점주 (owner)</option>
+                      <option value="manager">관리자 (manager)</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={createUserForm.storeName}
+                      onChange={(e) => setCreateUserForm({ ...createUserForm, storeName: e.target.value })}
+                      placeholder="가맹점명"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={createUserForm.position}
+                      onChange={(e) => setCreateUserForm({ ...createUserForm, position: e.target.value })}
+                      placeholder="직책 (선택)"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <button
+                      onClick={handleCreateUser}
+                      disabled={createUserLoading}
+                      className="w-full bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {createUserLoading ? '생성 중...' : '계정 생성'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Users List */}
+                <h4 className="font-bold text-primary mb-2">등록된 계정 ({allUsers.length})</h4>
+                <div className="space-y-2">
+                  {allUsers.map((u, index) => (
+                    <div key={index} className="bg-white border border-primary/10 p-3 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-primary text-sm">{u.name}</p>
+                          <p className="text-xs text-primary/40">{u.email}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            u.role === 'manager' ? 'bg-[#ffeb3b]/30 text-[#5d4037]' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {u.role === 'manager' ? '관리자' : '점주'}
+                          </span>
+                          <p className="text-xs text-primary/40 mt-1">{u.storeName}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* KB Management Modal */}
+      <AnimatePresence>
+        {showKbManagement && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowKbManagement(false)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    지식베이스 관리
+                  </h3>
+                  <button onClick={() => setShowKbManagement(false)}>
+                    <X className="w-5 h-5 text-primary/40" />
+                  </button>
+                </div>
+
+                {/* Manual Entry */}
+                <div className="bg-amber-50 p-4 rounded-xl mb-4">
+                  <h4 className="font-bold text-primary mb-3">항목 추가</h4>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={kbNewEntry.question}
+                      onChange={(e) => setKbNewEntry({ ...kbNewEntry, question: e.target.value })}
+                      placeholder="질문"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <textarea
+                      value={kbNewEntry.answer}
+                      onChange={(e) => setKbNewEntry({ ...kbNewEntry, answer: e.target.value })}
+                      placeholder="답변"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm min-h-[80px]"
+                    />
+                    <input
+                      type="text"
+                      value={kbNewEntry.category}
+                      onChange={(e) => setKbNewEntry({ ...kbNewEntry, category: e.target.value })}
+                      placeholder="카테고리 (선택)"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                    />
+                    <button
+                      onClick={handleKbAddEntry}
+                      className="w-full bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-primary/90"
+                    >
+                      추가
+                    </button>
+                  </div>
+                </div>
+
+                {/* CSV Upload */}
+                <div className="bg-[#8bc34a]/10 p-4 rounded-xl mb-4">
+                  <h4 className="font-bold text-primary mb-3">CSV 일괄 업로드</h4>
+                  <p className="text-xs text-primary/50 mb-3">CSV 파일에 question, answer, category (선택) 열이 필요합니다.</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <label className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-primary/30 cursor-pointer hover:bg-[#8bc34a]/20 transition-colors">
+                      <Upload className="w-4 h-4 text-primary/60" />
+                      <span className="text-sm text-primary/60">{kbCsvFile ? kbCsvFile.name : 'CSV 파일 선택'}</span>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        onChange={(e) => setKbCsvFile(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    onClick={handleKbCsvUpload}
+                    disabled={!kbCsvFile || kbUploadLoading}
+                    className="w-full bg-[#8bc34a] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#7cb342] disabled:opacity-50"
+                  >
+                    {kbUploadLoading ? '업로드 중...' : '업로드'}
+                  </button>
+                </div>
+
+                {kbUploadResult && (
+                  <div className="bg-green-50 text-green-700 p-3 rounded-xl text-sm flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {kbUploadResult}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user with role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "sv", "manager"] },
+        "storeName": { "type": "string" },
+        "position": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "ConsultingPost": {
+      "title": "ConsultingPost",
+      "description": "1:1 Consulting post between store owner and HQ",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "category": { "type": "string", "enum": ["EMERGENCY", "RECIPE", "LOGISTICS", "ADMIN"] },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isReplied": { "type": "boolean" },
+        "replyContent": { "type": "string" },
+        "repliedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "storeName", "category", "title", "content", "createdAt"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "HQ Emergency Guide / Notice",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "viewCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" }
+      },
+      "required": ["category", "title", "content", "createdAt", "authorId", "authorName"]
+    },
+    "ApprovedBusiness": {
+      "title": "ApprovedBusiness",
+      "description": "Pre-approved business registration numbers for signup",
+      "type": "object",
+      "properties": {
+        "businessNum": { "type": "string" },
+        "storeName": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["businessNum", "storeName", "ownerName", "createdAt", "createdBy"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "SV 1:1 SOS Inquiry",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string" },
+        "title": { "type": "string" },
+        "authorId": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] }
+      },
+      "required": ["storeName", "title", "authorId", "message", "createdAt", "status"]
+    },
+    "Manual": {
+      "title": "Manual",
+      "description": "Manuals, Q/A, Videos, Checklists",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" }
+      },
+      "required": ["category", "title", "content", "createdAt", "authorId", "authorName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile and role"
+    },
+    "/consulting_posts/{postId}": {
+      "schema": "ConsultingPost",
+      "description": "Consulting posts collection"
+    },
+    "/notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "HQ Notices collection"
+    },
+    "/approved_businesses/{businessNum}": {
+      "schema": "ApprovedBusiness",
+      "description": "Approved business numbers"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "Inquiry",
+      "description": "SV 1:1 SOS Inquiries collection"
+    },
+    "/manuals/{manualId}": {
+      "schema": "Manual",
+      "description": "Manuals and Q/A collection"
+    }
+  }
+}
