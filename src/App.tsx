@@ -256,7 +256,7 @@ export default function App() {
 
   // --- Auth Effects ---
   const loadUserProfile = async (uid: string, email?: string) => {
-    const { data } = await supabase.from('users').select('*').eq('uid', uid).single();
+    const { data, error } = await supabase.from('users').select('*').eq('uid', uid).maybeSingle();
     if (data) {
       setUserProfile({
         uid: data.uid,
