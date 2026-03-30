@@ -513,10 +513,10 @@ export default function App() {
       newPost.urgency !== '일반' ? `[긴급도] ${newPost.urgency}` : '',
       newPost.occurredAt ? `[발생일시] ${newPost.occurredAt}` : '',
       newPost.situation ? `[현재 상황]\n${newPost.situation}` : '',
-      newPost.attempted ? `[시도한 조치]\n${newPost.attempted}` : '',
-      newPost.request ? `[요청 사항]\n${newPost.request}` : '',
+      `[시도한 조치]\n${newPost.attempted || '없음'}`,
+      `[요청 사항]\n${newPost.request || '없음'}`,
     ].filter(Boolean).join('\n\n');
-    const content = contentParts || '(상세 내용 없음)';
+    const content = contentParts;
 
     try {
       await supabase.from('consulting_posts').insert({
