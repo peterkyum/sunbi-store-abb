@@ -94,6 +94,9 @@ interface UserProfile {
   role: 'manager' | 'owner';
   storeName: string;
   position: string;
+  businessNumber?: string;
+  invoiceEmail?: string;
+  phone?: string;
 }
 
 interface Notice {
@@ -243,7 +246,7 @@ export default function App() {
   // --- User Management State ---
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [createUserForm, setCreateUserForm] = useState({ email: '', password: '', name: '', role: 'owner' as 'manager' | 'owner', storeName: '', position: '' });
+  const [createUserForm, setCreateUserForm] = useState({ email: '', password: '', name: '', role: 'owner' as 'manager' | 'owner', storeName: '', position: '', businessNumber: '', invoiceEmail: '', phone: '' });
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [createUserError, setCreateUserError] = useState('');
 
@@ -415,6 +418,9 @@ export default function App() {
         role: row.role,
         storeName: row.store_name,
         position: row.position,
+        businessNumber: row.business_number,
+        invoiceEmail: row.invoice_email,
+        phone: row.phone,
       }));
       setAllUsers(users);
     } catch (error) {
@@ -803,7 +809,7 @@ export default function App() {
       }));
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-05-20',
+        model: 'gemini-2.0-flash',
         contents: [
           ...chatHistory,
           { role: 'user', parts: [{ text: userMessage }] }
@@ -824,28 +830,32 @@ export default function App() {
 
   // --- User Management Handler ---
   const handleCreateUser = async () => {
-    if (!createUserForm.email || !createUserForm.password || !createUserForm.name) return;
+    if (!createUserForm.storeName || !createUserForm.name || !createUserForm.email) return;
     setCreateUserLoading(true);
     setCreateUserError('');
     try {
-      const response = await fetch('/api/admin/create-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: createUserForm.email,
-          password: createUserForm.password,
-          name: createUserForm.name,
-          role: createUserForm.role,
-          storeName: createUserForm.storeName,
-          position: createUserForm.position || (createUserForm.role === 'owner' ? '점주' : '직원'),
-          adminUid: user?.id,
-        }),
+      // Create auth account in Supabase
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: createUserForm.email,
+        password: createUserForm.password || 'sunbi1234',
       });
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || '계정 생성에 실패했습니다.');
-      }
-      setCreateUserForm({ email: '', password: '', name: '', role: 'owner', storeName: '', position: '' });
+      if (authError) throw authError;
+
+      // Insert user profile into users table
+      const uid = authData.user?.id || '';
+      await supabase.from('users').insert({
+        uid,
+        email: createUserForm.email,
+        name: createUserForm.name,
+        role: createUserForm.role,
+        store_name: createUserForm.storeName,
+        position: createUserForm.position || (createUserForm.role === 'owner' ? '점주' : '직원'),
+        business_number: createUserForm.businessNumber,
+        invoice_email: createUserForm.invoiceEmail,
+        phone: createUserForm.phone,
+      });
+
+      setCreateUserForm({ email: '', password: '', name: '', role: 'owner', storeName: '', position: '', businessNumber: '', invoiceEmail: '', phone: '' });
       loadAllUsers();
     } catch (error: any) {
       setCreateUserError(error.message || '계정 생성 중 오류가 발생했습니다.');
@@ -1868,10 +1878,10 @@ export default function App() {
                   <X className="w-5 h-5 text-primary/40" />
                 </button>
               </div>
-              <div className="flex-1">
+              <div style={{ height: '45%' }}>
                 <MapContainer
                   center={[37.5050, 127.0500]}
-                  zoom={12}
+                  zoom={11}
                   style={{ height: '100%', width: '100%' }}
                 >
                   <TileLayer
@@ -1886,6 +1896,19 @@ export default function App() {
                     </Marker>
                   ))}
                 </MapContainer>
+              </div>
+              <div className="flex-1 overflow-y-auto border-t">
+                <div className="p-3">
+                  <h4 className="text-sm font-bold text-primary mb-2">전체 가맹점 리스트</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {BRANCHES.map((branch, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-amber-50 p-2.5 rounded-lg">
+                        <MapPin className="w-3.5 h-3.5 text-brand-green shrink-0" />
+                        <span className="text-xs font-medium text-primary">선비칼국수 {branch.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -2399,7 +2422,7 @@ export default function App() {
               <div className="p-4 border-b flex items-center justify-between">
                 <h3 className="text-lg font-bold text-primary flex items-center gap-2">
                   <MessageSquare className="w-5 h-5" />
-                  Q&A 챗봇
+                  선비칼국수 Q&A
                 </h3>
                 <button onClick={() => setShowQaChat(false)}>
                   <X className="w-5 h-5 text-primary/40" />
@@ -2466,7 +2489,7 @@ export default function App() {
                     onChange={(e) => setQaInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQaSubmit(); } }}
                     placeholder="질문을 입력하세요..."
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm text-primary"
                     disabled={qaLoading}
                   />
                   <button
@@ -2521,55 +2544,90 @@ export default function App() {
                     </div>
                   )}
                   <div className="space-y-3">
-                    <input
-                      type="email"
-                      value={createUserForm.email}
-                      onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
-                      placeholder="이메일"
-                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
-                    />
-                    <input
-                      type="password"
-                      value={createUserForm.password}
-                      onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
-                      placeholder="비밀번호 (6자 이상)"
-                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={createUserForm.name}
-                      onChange={(e) => setCreateUserForm({ ...createUserForm, name: e.target.value })}
-                      placeholder="이름"
-                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
-                    />
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">지점명 *</label>
+                      <input
+                        type="text"
+                        value={createUserForm.storeName}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, storeName: e.target.value })}
+                        placeholder="예: 강남점"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">이름 (대표자명) *</label>
+                      <input
+                        type="text"
+                        value={createUserForm.name}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, name: e.target.value })}
+                        placeholder="대표자 이름"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">사업자등록번호</label>
+                      <input
+                        type="text"
+                        value={createUserForm.businessNumber}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, businessNumber: e.target.value })}
+                        placeholder="000-00-00000"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">계산서 발행 이메일 *</label>
+                      <input
+                        type="email"
+                        value={createUserForm.invoiceEmail}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, invoiceEmail: e.target.value })}
+                        placeholder="세금계산서 수신 이메일"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">연락처</label>
+                      <input
+                        type="tel"
+                        value={createUserForm.phone}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, phone: e.target.value })}
+                        placeholder="010-0000-0000"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">로그인 이메일 *</label>
+                      <input
+                        type="email"
+                        value={createUserForm.email}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
+                        placeholder="로그인용 이메일"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-primary/70 mb-1">비밀번호</label>
+                      <input
+                        type="password"
+                        value={createUserForm.password}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
+                        placeholder="미입력시 기본값: sunbi1234"
+                        className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
+                      />
+                    </div>
                     <select
                       value={createUserForm.role}
                       onChange={(e) => setCreateUserForm({ ...createUserForm, role: e.target.value as 'manager' | 'owner' })}
-                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
+                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm text-primary"
                     >
                       <option value="owner">점주 (owner)</option>
                       <option value="manager">관리자 (manager)</option>
                     </select>
-                    <input
-                      type="text"
-                      value={createUserForm.storeName}
-                      onChange={(e) => setCreateUserForm({ ...createUserForm, storeName: e.target.value })}
-                      placeholder="가맹점명"
-                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={createUserForm.position}
-                      onChange={(e) => setCreateUserForm({ ...createUserForm, position: e.target.value })}
-                      placeholder="직책 (선택)"
-                      className="w-full px-3 py-2 rounded-lg border border-primary/20 text-sm"
-                    />
                     <button
                       onClick={handleCreateUser}
-                      disabled={createUserLoading}
-                      className="w-full bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                      disabled={createUserLoading || !createUserForm.storeName || !createUserForm.name || !createUserForm.email}
+                      className="w-full bg-primary text-white py-2.5 rounded-lg text-sm font-bold hover:bg-primary/90 disabled:opacity-50"
                     >
-                      {createUserLoading ? '생성 중...' : '계정 생성'}
+                      {createUserLoading ? '등록 중...' : '계정 등록'}
                     </button>
                   </div>
                 </div>
@@ -2579,19 +2637,21 @@ export default function App() {
                 <div className="space-y-2">
                   {allUsers.map((u, index) => (
                     <div key={index} className="bg-white border border-primary/10 p-3 rounded-xl">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-1">
                         <div>
-                          <p className="font-medium text-primary text-sm">{u.name}</p>
+                          <p className="font-medium text-primary text-sm">{u.storeName} — {u.name}</p>
                           <p className="text-xs text-primary/40">{u.email}</p>
                         </div>
-                        <div className="text-right">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            u.role === 'manager' ? 'bg-[#ffeb3b]/30 text-[#5d4037]' : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {u.role === 'manager' ? '관리자' : '점주'}
-                          </span>
-                          <p className="text-xs text-primary/40 mt-1">{u.storeName}</p>
-                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          u.role === 'manager' ? 'bg-[#ffeb3b]/30 text-[#5d4037]' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {u.role === 'manager' ? '관리자' : '점주'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-primary/50">
+                        {u.businessNumber && <span>사업자: {u.businessNumber}</span>}
+                        {u.invoiceEmail && <span>계산서: {u.invoiceEmail}</span>}
+                        {u.phone && <span>연락처: {u.phone}</span>}
                       </div>
                     </div>
                   ))}

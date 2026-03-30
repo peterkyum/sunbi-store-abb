@@ -20,6 +20,15 @@
   }
 }
 
+.bg-white input,
+.bg-white textarea,
+.bg-white select,
+.bg-amber-50 input,
+.bg-amber-50 textarea,
+.bg-amber-50 select {
+  color: #4a3a32;
+}
+
 .markdown-body p {
   @apply mb-2 last:mb-0;
 }
