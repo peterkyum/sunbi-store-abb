@@ -39,6 +39,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // Telegram notification
+    const telegramToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    const telegramChatId = process.env.TELEGRAM_CHAT_ID?.trim();
+    if (telegramToken && telegramChatId) {
+      try {
+        const controller = new AbortController();
+        const tgTimeout = setTimeout(() => controller.abort(), 5000);
+
+        await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: telegramChatId,
+            text: `📝 *[1:1 문의 접수]*\n*지점명:* ${storeName || '알 수 없음'}\n*구분:* ${category || '기타'}\n*제목:* ${title || '제목 없음'}\n*내용:* ${content || '내용 없음'}`,
+            parse_mode: 'Markdown',
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(tgTimeout);
+      } catch (tgError) {
+        console.error('Telegram Error:', tgError);
+      }
+    }
+
+    // Slack notification
     const slackWebhookUrl =
       process.env.SLACK_WEBHOOK_URL_CONSULTING?.trim() || process.env.SLACK_WEBHOOK_URL_SOS?.trim();
     if (slackWebhookUrl) {
