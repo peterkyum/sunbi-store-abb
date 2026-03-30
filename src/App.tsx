@@ -181,9 +181,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [signUpForm, setSignUpForm] = useState({ email: '', password: '', name: '', storeName: '' });
   const [authError, setAuthError] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 
   // --- App State ---
@@ -500,42 +498,7 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthLoading(true);
-    setAuthError('');
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: signUpForm.email,
-        password: signUpForm.password,
-      });
-      if (authError) throw authError;
 
-      // Create user profile in users table
-      if (authData.user) {
-        const profile: UserProfile = {
-          uid: authData.user.id,
-          email: signUpForm.email,
-          name: signUpForm.name,
-          role: 'owner',
-          storeName: signUpForm.storeName,
-          position: '점주',
-        };
-        await supabase.from('users').insert({
-          uid: authData.user.id,
-          email: signUpForm.email,
-          name: signUpForm.name,
-          role: 'owner',
-          store_name: signUpForm.storeName,
-          position: '점주',
-        });
-        setUserProfile(profile);
-      }
-    } catch (error: any) {
-      setAuthError(error.message || '회원가입에 실패했습니다.');
-    }
-    setAuthLoading(false);
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -1029,8 +992,7 @@ export default function App() {
           </div>
 
           <div className="w-full">
-            {!isSignUp ? (
-              <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-6">
                 {authError && (
                   <div className="bg-red-500/20 text-red-100 border border-red-500/50 p-3 rounded-lg text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1073,80 +1035,8 @@ export default function App() {
                   <button type="button" className="hover:text-white transition-colors">아이디 찾기</button>
                   <span className="text-white/30">|</span>
                   <button type="button" className="hover:text-white transition-colors">비밀번호 재설정</button>
-                  <span className="text-white/30">|</span>
-                  <button type="button" onClick={() => { setIsSignUp(true); setAuthError(''); }} className="text-accent hover:text-yellow-300 transition-colors">회원가입</button>
                 </div>
               </form>
-            ) : (
-              <form onSubmit={handleSignUp} className="space-y-6">
-                <h2 className="text-xl font-bold text-white mb-2 text-center">점주 파트너 가입</h2>
-                {authError && (
-                  <div className="bg-red-500/20 text-red-100 border border-red-500/50 p-3 rounded-lg text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {authError}
-                  </div>
-                )}
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">이메일 주소</label>
-                    <input
-                      type="email"
-                      value={signUpForm.email}
-                      onChange={(e) => setSignUpForm({ ...signUpForm, email: e.target.value })}
-                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
-                      placeholder="이메일을 입력하세요"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">비밀번호</label>
-                    <input
-                      type="password"
-                      value={signUpForm.password}
-                      onChange={(e) => setSignUpForm({ ...signUpForm, password: e.target.value })}
-                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
-                      placeholder="6자 이상"
-                      required
-                      minLength={6}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">이름</label>
-                    <input
-                      type="text"
-                      value={signUpForm.name}
-                      onChange={(e) => setSignUpForm({ ...signUpForm, name: e.target.value })}
-                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
-                      placeholder="이름을 입력하세요"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">가맹점명</label>
-                    <input
-                      type="text"
-                      value={signUpForm.storeName}
-                      onChange={(e) => setSignUpForm({ ...signUpForm, storeName: e.target.value })}
-                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
-                      placeholder="가맹점명을 입력하세요"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full bg-accent text-primary py-4 rounded-xl font-bold text-lg hover:bg-yellow-300 transition-colors disabled:opacity-50 mt-2 shadow-lg"
-                >
-                  {authLoading ? '가입 중...' : '회원가입하기'}
-                </button>
-                <div className="text-center mt-6">
-                  <button type="button" onClick={() => { setIsSignUp(false); setAuthError(''); }} className="text-sm font-bold text-white/60 hover:text-white transition-colors">
-                    뒤로 로그인으로
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
         </motion.div>
       </div>
