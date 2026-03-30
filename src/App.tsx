@@ -191,7 +191,7 @@ export default function App() {
   const [consultingPosts, setConsultingPosts] = useState<ConsultingPost[]>([]);
   const [selectedPost, setSelectedPost] = useState<ConsultingPost | null>(null);
   const [showCreatePost, setShowCreatePost] = useState(false);
-  const [newPost, setNewPost] = useState({ category: '운영', title: '', content: '' });
+  const [newPost, setNewPost] = useState({ category: '운영', title: '', urgency: '일반' as '일반' | '긴급' | '매우긴급', occurredAt: '', situation: '', attempted: '', request: '' });
   const [answerText, setAnswerText] = useState('');
   const [consultingFilter, setConsultingFilter] = useState('all');
 
@@ -508,18 +508,27 @@ export default function App() {
 
   // --- Consulting Handlers ---
   const handleCreatePost = async () => {
-    if (!user || !userProfile || !newPost.title || !newPost.content) return;
+    if (!user || !userProfile || !newPost.title) return;
+    const contentParts = [
+      newPost.urgency !== '일반' ? `[긴급도] ${newPost.urgency}` : '',
+      newPost.occurredAt ? `[발생일시] ${newPost.occurredAt}` : '',
+      newPost.situation ? `[현재 상황]\n${newPost.situation}` : '',
+      newPost.attempted ? `[시도한 조치]\n${newPost.attempted}` : '',
+      newPost.request ? `[요청 사항]\n${newPost.request}` : '',
+    ].filter(Boolean).join('\n\n');
+    const content = contentParts || '(상세 내용 없음)';
+
     try {
       await supabase.from('consulting_posts').insert({
         category: newPost.category,
-        title: newPost.title,
-        content: newPost.content,
+        title: `${newPost.urgency !== '일반' ? `[${newPost.urgency}] ` : ''}${newPost.title}`,
+        content,
         user_id: user.id,
         store_name: userProfile.storeName,
         status: 'pending',
       });
 
-      // Notify via server (Slack + Notion)
+      // Notify via server (Slack + Notion + Telegram)
       try {
         await fetch('/api/notion/consulting', {
           method: 'POST',
@@ -527,15 +536,15 @@ export default function App() {
           body: JSON.stringify({
             storeName: userProfile.storeName,
             category: newPost.category,
-            title: newPost.title,
-            content: newPost.content,
+            title: `${newPost.urgency !== '일반' ? `[${newPost.urgency}] ` : ''}${newPost.title}`,
+            content,
           }),
         });
       } catch (notifyError) {
         console.error('Notification error:', notifyError);
       }
 
-      setNewPost({ category: '운영', title: '', content: '' });
+      setNewPost({ category: '운영', title: '', urgency: '일반', occurredAt: '', situation: '', attempted: '', request: '' });
       setShowCreatePost(false);
       loadConsultingPosts();
     } catch (error) {
@@ -1380,44 +1389,94 @@ export default function App() {
                     <X className="w-5 h-5 text-primary/40" />
                   </button>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-primary/70 mb-1">카테고리</label>
-                    <select
-                      value={newPost.category}
-                      onChange={(e) => setNewPost({ ...newPost, category: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-                    >
-                      <option value="운영">운영</option>
-                      <option value="식재료">식재료</option>
-                      <option value="시설/설비">시설/설비</option>
-                      <option value="인사/노무">인사/노무</option>
-                      <option value="마케팅">마케팅</option>
-                      <option value="기타">기타</option>
-                    </select>
+                <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-primary/70 mb-1">카테고리</label>
+                      <select
+                        value={newPost.category}
+                        onChange={(e) => setNewPost({ ...newPost, category: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                      >
+                        <option value="운영">운영</option>
+                        <option value="식재료">식재료</option>
+                        <option value="시설/설비">시설/설비</option>
+                        <option value="인사/노무">인사/노무</option>
+                        <option value="마케팅">마케팅</option>
+                        <option value="기타">기타</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-primary/70 mb-1">긴급도</label>
+                      <div className="flex gap-2">
+                        {(['일반', '긴급', '매우긴급'] as const).map(level => (
+                          <button
+                            key={level}
+                            onClick={() => setNewPost({ ...newPost, urgency: level })}
+                            className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
+                              newPost.urgency === level
+                                ? level === '매우긴급' ? 'bg-red-500 text-white'
+                                : level === '긴급' ? 'bg-orange-400 text-white'
+                                : 'bg-primary text-white'
+                                : 'bg-primary/5 text-primary/60 hover:bg-primary/10'
+                            }`}
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-primary/70 mb-1">제목</label>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">제목 <span className="text-red-400">*</span></label>
                     <input
                       type="text"
                       value={newPost.title}
                       onChange={(e) => setNewPost({ ...newPost, title: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-                      placeholder="제목을 입력하세요"
+                      placeholder="예: 냉장고 온도 이상, 식재료 배송 지연 등"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-primary/70 mb-1">내용</label>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">발생일시</label>
+                    <input
+                      type="datetime-local"
+                      value={newPost.occurredAt}
+                      onChange={(e) => setNewPost({ ...newPost, occurredAt: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">현재 상황</label>
                     <textarea
-                      value={newPost.content}
-                      onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[120px]"
-                      placeholder="문의 내용을 입력하세요"
+                      value={newPost.situation}
+                      onChange={(e) => setNewPost({ ...newPost, situation: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[80px]"
+                      placeholder="어떤 문제가 발생했는지 적어주세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">시도한 조치</label>
+                    <textarea
+                      value={newPost.attempted}
+                      onChange={(e) => setNewPost({ ...newPost, attempted: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[60px]"
+                      placeholder="직접 해본 조치가 있다면 적어주세요"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/70 mb-1">요청 사항</label>
+                    <textarea
+                      value={newPost.request}
+                      onChange={(e) => setNewPost({ ...newPost, request: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm min-h-[60px]"
+                      placeholder="본사에 원하는 지원 내용을 적어주세요"
                     />
                   </div>
                   <button
                     onClick={handleCreatePost}
-                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+                    disabled={!newPost.title.trim()}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     문의 등록
                   </button>
