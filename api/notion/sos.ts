@@ -43,12 +43,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const controller = new AbortController();
         const tgTimeout = setTimeout(() => controller.abort(), 5000);
 
+        const divider = '─────────────────';
+        const tgText = [
+          `🚨 *SOS 긴급 문의* 🚨`,
+          divider,
+          `🏪 *${storeName || '알 수 없음'}*`,
+          `📌 *${title || '제목 없음'}*`,
+          divider,
+          message || '(상세 내용 없음)',
+          divider,
+          `🕐 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`,
+        ].join('\n');
+
         await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: telegramChatId,
-            text: `🚨 *[SOS 긴급 문의]* 🚨\n*가맹점명:* ${storeName || '알 수 없음'}\n*제목:* ${title || '제목 없음'}\n*내용:* ${message || '내용 없음'}`,
+            text: tgText,
             parse_mode: 'Markdown',
           }),
           signal: controller.signal,
