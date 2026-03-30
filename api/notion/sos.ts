@@ -45,14 +45,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const divider = '─────────────────';
         const tgText = [
-          `🚨 *SOS 긴급 문의* 🚨`,
+          `🚨 *SOS 긴급 문의*`,
           divider,
-          `🏪 *${storeName || '알 수 없음'}*`,
-          `📌 *${title || '제목 없음'}*`,
+          `${storeName || '알 수 없음'}`,
+          `*${title || '제목 없음'}*`,
           divider,
           message || '(상세 내용 없음)',
           divider,
-          `🕐 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`,
+          new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
         ].join('\n');
 
         await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {

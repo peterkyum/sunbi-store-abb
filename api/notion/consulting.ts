@@ -47,19 +47,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const controller = new AbortController();
         const tgTimeout = setTimeout(() => controller.abort(), 5000);
 
-        const isUrgent = (title || '').includes('[긴급]') || (title || '').includes('[매우긴급]');
-        const urgencyIcon = (title || '').includes('[매우긴급]') ? '🔴' : (title || '').includes('[긴급]') ? '🟠' : '🟢';
+        const urgencyLabel = (title || '').includes('[매우긴급]') ? '🔴 매우긴급' : (title || '').includes('[긴급]') ? '🟠 긴급' : '🟢 일반';
+        const cleanTitle = (title || '제목 없음').replace(/\[긴급\]\s?|\[매우긴급\]\s?/g, '');
         const divider = '─────────────────';
         const tgText = [
-          `📝 *1:1 문의 접수* ${urgencyIcon}`,
+          `📝 *1:1 문의 접수*`,
           divider,
-          `🏪 *${storeName || '알 수 없음'}*`,
-          `📂 ${category || '기타'}  ｜  ${urgencyIcon} ${isUrgent ? (title || '').match(/\[(.*?)\]/)?.[1] || '일반' : '일반'}`,
-          `📌 *${(title || '제목 없음').replace(/\[긴급\]\s?|\[매우긴급\]\s?/g, '')}*`,
+          `${storeName || '알 수 없음'} ｜ ${category || '기타'} ｜ ${urgencyLabel}`,
+          `*${cleanTitle}*`,
           divider,
           content || '(상세 내용 없음)',
           divider,
-          `🕐 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`,
+          new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
         ].join('\n');
 
         await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
