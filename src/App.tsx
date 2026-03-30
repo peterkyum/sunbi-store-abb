@@ -369,22 +369,45 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from('consulting_posts')
-        .select('*')
+        .select('*, users!consulting_posts_user_id_fkey(name)')
         .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (error) {
+        // Fallback without join if FK doesn't exist
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('consulting_posts')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (fallbackError) throw fallbackError;
+        const posts: ConsultingPost[] = (fallbackData ?? []).map((row: any) => ({
+          id: row.id,
+          category: row.category,
+          title: row.title,
+          content: row.content,
+          author: row.store_name || '알 수 없음',
+          authorUid: row.user_id,
+          storeName: row.store_name,
+          createdAt: row.created_at,
+          status: row.status,
+          answer: '',
+          answeredBy: '',
+          answeredAt: '',
+        }));
+        setConsultingPosts(posts);
+        return;
+      }
       const posts: ConsultingPost[] = (data ?? []).map((row: any) => ({
         id: row.id,
         category: row.category,
         title: row.title,
         content: row.content,
-        author: row.author,
-        authorUid: row.author_uid,
+        author: row.users?.name || row.store_name || '알 수 없음',
+        authorUid: row.user_id,
         storeName: row.store_name,
         createdAt: row.created_at,
         status: row.status,
-        answer: row.answer,
-        answeredBy: row.answered_by,
-        answeredAt: row.answered_at,
+        answer: '',
+        answeredBy: '',
+        answeredAt: '',
       }));
       setConsultingPosts(posts);
     } catch (error) {
@@ -528,10 +551,8 @@ export default function App() {
         category: newPost.category,
         title: newPost.title,
         content: newPost.content,
-        author: userProfile.name,
-        author_uid: user.id,
+        user_id: user.id,
         store_name: userProfile.storeName,
-        created_at: new Date().toISOString(),
         status: 'pending',
       });
 
@@ -564,9 +585,6 @@ export default function App() {
     try {
       await supabase.from('consulting_posts').update({
         status: 'answered',
-        answer: answerText,
-        answered_by: userProfile.name,
-        answered_at: new Date().toISOString(),
       }).eq('id', postId);
       setAnswerText('');
       setSelectedPost(null);
