@@ -131,46 +131,48 @@ const HQ_ACCOUNTS = [
   { email: 'gil@sunbi.com', pw: 'sunbi1234', name: '길태훈', position: '팀장', role: 'manager', storeName: '본사' }
 ];
 
-// Branches (38 entries)
+// Branches (39 entries)
 const BRANCHES = [
-  { name: '성내점', lat: 37.5301, lng: 127.1270 },
-  { name: '명일점', lat: 37.5565, lng: 127.1455 },
-  { name: '고덕점', lat: 37.5560, lng: 127.1540 },
-  { name: '암사점', lat: 37.5520, lng: 127.1280 },
-  { name: '길동점', lat: 37.5370, lng: 127.1390 },
-  { name: '둔촌점', lat: 37.5230, lng: 127.1360 },
-  { name: '천호점', lat: 37.5385, lng: 127.1230 },
-  { name: '강일점', lat: 37.5580, lng: 127.1720 },
-  { name: '상일점', lat: 37.5570, lng: 127.1660 },
-  { name: '미사점', lat: 37.5610, lng: 127.1900 },
-  { name: '위례점', lat: 37.4780, lng: 127.1430 },
-  { name: '송파점', lat: 37.5050, lng: 127.1120 },
-  { name: '잠실점', lat: 37.5130, lng: 127.1000 },
-  { name: '문정점', lat: 37.4850, lng: 127.1260 },
-  { name: '가락점', lat: 37.4960, lng: 127.1180 },
-  { name: '오금점', lat: 37.5020, lng: 127.1280 },
-  { name: '방이점', lat: 37.5110, lng: 127.1150 },
-  { name: '석촌점', lat: 37.5060, lng: 127.1050 },
-  { name: '마천점', lat: 37.4950, lng: 127.1500 },
-  { name: '거여점', lat: 37.4970, lng: 127.1440 },
-  { name: '장지점', lat: 37.4780, lng: 127.1260 },
-  { name: '복정점', lat: 37.4700, lng: 127.1260 },
-  { name: '수서점', lat: 37.4870, lng: 127.1020 },
-  { name: '일원점', lat: 37.4830, lng: 127.0870 },
-  { name: '개포점', lat: 37.4780, lng: 127.0550 },
-  { name: '대치점', lat: 37.4940, lng: 127.0630 },
-  { name: '도곡점', lat: 37.4870, lng: 127.0440 },
-  { name: '역삼점', lat: 37.5010, lng: 127.0370 },
-  { name: '삼성점', lat: 37.5090, lng: 127.0630 },
-  { name: '청담점', lat: 37.5200, lng: 127.0530 },
-  { name: '압구정점', lat: 37.5270, lng: 127.0280 },
-  { name: '신사점', lat: 37.5160, lng: 127.0200 },
-  { name: '논현점', lat: 37.5110, lng: 127.0290 },
-  { name: '반포점', lat: 37.5050, lng: 127.0110 },
-  { name: '서초점', lat: 37.4920, lng: 127.0070 },
-  { name: '양재점', lat: 37.4840, lng: 127.0340 },
-  { name: '내곡점', lat: 37.4680, lng: 127.0700 },
-  { name: '세곡점', lat: 37.4650, lng: 127.0990 },
+  { name: '광교중앙역점', lat: 37.2854, lng: 127.0534, address: '경기도 수원시 영통구 도청로 95, 지1층 B1-202호', region: '경기', sv: '강한빛', owner: '강한빛' },
+  { name: '매탄점', lat: 37.2655, lng: 127.0340, address: '경기 수원시 영통구 삼성로 210 1층', region: '경기', sv: '윤석진', owner: '윤정임' },
+  { name: '광교호수공원점', lat: 37.2887, lng: 127.0466, address: '경기도 수원시 광교중앙로180', region: '경기', sv: '윤석진', owner: '박영준' },
+  { name: '상현역점', lat: 37.2937, lng: 127.0696, address: '경기도 용인시 수지구 광교중앙로 296번길 14 2층 201호', region: '경기', sv: '윤석진', owner: '유영희' },
+  { name: '사당점', lat: 37.4836, lng: 126.9816, address: '서울 서초구 방배천로2길 37 2층', region: '서울', sv: '윤석진', owner: '최규영' },
+  { name: '성남고등점', lat: 37.4330, lng: 127.0490, address: '경기 성남시 수정구 청계산로 686 1층 144호, 145호', region: '경기', sv: '윤석진', owner: '이주현' },
+  { name: '월드컵점', lat: 37.2845, lng: 127.0160, address: '경기 수원시 팔달구 창룡대로210번길 41 1층', region: '경기', sv: '윤석진', owner: '권지훈' },
+  { name: '고색점', lat: 37.2570, lng: 126.9730, address: '경기 수원시 권선구 산업로 180 DH테크타워 123.124호', region: '경기', sv: '길태훈', owner: '채선미' },
+  { name: '울진점', lat: 36.9930, lng: 129.4002, address: '경북 울진군 울진읍 읍내8길 42-10 1층', region: '경북', sv: '길태훈', owner: '은종민' },
+  { name: '한림대학교동탄성심병원점', lat: 37.2270, lng: 127.0570, address: '경기 화성시 삼성1로 150 1층 107호', region: '경기', sv: '길태훈', owner: '채상호' },
+  { name: '수정구청점', lat: 37.4500, lng: 127.1380, address: '경기 성남시 수정구 수정로 249 1층', region: '경기', sv: '길태훈', owner: '이은경' },
+  { name: '김천대신점', lat: 36.1198, lng: 128.1135, address: '경북 김천시 부거리길 20 다동 2호', region: '경북', sv: '길태훈', owner: '김수기' },
+  { name: '안동점', lat: 36.5684, lng: 128.7294, address: '경북 안동시 하이마로 136 2층', region: '경북', sv: '길태훈', owner: '박은미' },
+  { name: '동탄영천점', lat: 37.2060, lng: 127.0710, address: '경기 화성시 동탄대로 637 1층 110, 111호', region: '경기', sv: '윤석진', owner: '변우석' },
+  { name: '동탄방교점', lat: 37.2170, lng: 127.0560, address: '경기 화성시 동탄기흥로 147-11 1층 105호106호', region: '경기', sv: '윤석진', owner: '이상민' },
+  { name: '춘천엔터점', lat: 37.8680, lng: 127.7280, address: '강원도 춘천시 후석로 120 2층 211-2호', region: '강원', sv: '길태훈', owner: '김성태' },
+  { name: '충주호암점', lat: 36.9600, lng: 127.9280, address: '충북 충주시 호암중앙1로51', region: '충북', sv: '길태훈', owner: '김민호' },
+  { name: '흥덕점', lat: 37.2790, lng: 127.0730, address: '경기도 용인시 기흥구 영덕동1005 흥덕IT벨리 1층 118-a호', region: '경기', sv: '윤석진', owner: '박미정' },
+  { name: '용인백암점', lat: 37.1560, lng: 127.3220, address: '경기도 용인시 처인구 백암면 백암로 161', region: '경기', sv: '길태훈', owner: '정혜민' },
+  { name: '신림대학동점', lat: 37.4739, lng: 126.9308, address: '서울 관악구 신림로 113', region: '서울', sv: '길태훈', owner: '오정숙' },
+  { name: '대구침산점', lat: 35.8900, lng: 128.5810, address: '대구광역시 북구 옥산로 17길 14 1층 113호', region: '경북', sv: '길태훈', owner: '정현욱' },
+  { name: '안산신길점', lat: 37.3380, lng: 126.7810, address: '경기도 안산시 단원구 신길로 10-5', region: '경기', sv: '길태훈', owner: '최명애' },
+  { name: '안산반월공단점', lat: 37.3370, lng: 126.7520, address: '경기도 안산시 단원구 만해로 205 A127호', region: '경기', sv: '길태훈', owner: '서유림' },
+  { name: '송파문정역점', lat: 37.4860, lng: 127.1230, address: '송파구 문정동 642 송파테라타워2 1층 비-106호', region: '서울', sv: '윤석진', owner: '허영란' },
+  { name: '송파방이점', lat: 37.5110, lng: 127.1150, address: '송파구 방이동 39 잠실제니알 1층 101호', region: '서울', sv: '윤석진', owner: '이영예' },
+  { name: '선릉역점', lat: 37.5045, lng: 127.0490, address: '서울 강남구 역삼동 705 지하 1층', region: '서울', sv: '윤석진', owner: '김준' },
+  { name: '산본롯데점', lat: 37.3630, lng: 126.9320, address: '경기 군포시 산본동 1145-6 7층', region: '경기', sv: '윤석진', owner: '강유림' },
+  { name: '수원일월점', lat: 37.2570, lng: 126.9920, address: '경기 수원시 권선구 일월천로4번길 49-6 1층', region: '경기', sv: '길태훈', owner: '박성림' },
+  { name: '안산중앙역점', lat: 37.3290, lng: 126.8280, address: '경기 안산시 단원구 당곡로 27 1층 111호', region: '경기', sv: '길태훈', owner: '오민재' },
+  { name: '케이티위즈파크점', lat: 37.2990, lng: 127.0090, address: '경기 수원시 장안구 송원로 82 1, 2층', region: '경기', sv: '길태훈', owner: '곽행화' },
+  { name: '포천송우리점', lat: 37.7710, lng: 127.1430, address: '경기 포천시 소흘읍 호국로 297', region: '경기', sv: '길태훈', owner: '신윤서' },
+  { name: '삼성대치점', lat: 37.5070, lng: 127.0590, address: '서울 강남구 영동대로 86길 27', region: '서울', sv: '윤석진', owner: '이미영' },
+  { name: '분당정자역점', lat: 37.3683, lng: 127.1108, address: '경기 성남시 분당구 정자동 170-1', region: '경기', sv: '김연겸', owner: '김현경' },
+  { name: '의정부민락점', lat: 37.7560, lng: 127.0830, address: '경기도 의정부시 오목로 205번길 30', region: '경기', sv: '길태훈', owner: '이미경' },
+  { name: '일산탄현역점', lat: 37.6880, lng: 126.7560, address: '경기도 고양시 일산서구 덕이동 388', region: '경기', sv: '길태훈', owner: '공미영' },
+  { name: '남양주다산한강갤러리점', lat: 37.6110, lng: 127.1530, address: '경기도 남양주 다산지금로163번길 6 한강프리미어갤러리 1층 R124호', region: '경기', sv: '길태훈', owner: '임주은' },
+  { name: '남양주2청사점', lat: 37.6120, lng: 127.1480, address: '경기도 남양주시 다산지금로 16번길 43 109,110호', region: '경기', sv: '길태훈', owner: '김혜란' },
+  { name: '역삼점', lat: 37.5012, lng: 127.0396, address: '서울특별시 강남구 역삼동 642-21 성지하이츠 지하1층', region: '서울', sv: '윤석진', owner: '전형일' },
+  { name: '인천구월동점', lat: 37.4490, lng: 126.7040, address: '인천광역시 남동구 미래로 30 106호, 107호', region: '인천', sv: '길태훈', owner: '김애란' },
+  { name: '군포첨단산업단지점', lat: 37.3440, lng: 126.9380, address: '경기 군포시 번영로 40 1층 102호', region: '경기', sv: '길태훈', owner: '박상권' },
 ];
 
 export default function App() {
@@ -1880,8 +1882,8 @@ export default function App() {
               </div>
               <div style={{ height: '45%' }}>
                 <MapContainer
-                  center={[37.5050, 127.0500]}
-                  zoom={11}
+                  center={[37.0, 127.5]}
+                  zoom={7}
                   style={{ height: '100%', width: '100%' }}
                 >
                   <TileLayer
@@ -1891,7 +1893,8 @@ export default function App() {
                   {BRANCHES.map((branch, index) => (
                     <Marker key={index} position={[branch.lat, branch.lng]}>
                       <Popup>
-                        <strong>선비칼국수 {branch.name}</strong>
+                        <strong>선비칼국수 {branch.name}</strong><br/>
+                        <span style={{fontSize: '11px', color: '#666'}}>{branch.address}</span>
                       </Popup>
                     </Marker>
                   ))}
@@ -1900,11 +1903,14 @@ export default function App() {
               <div className="flex-1 overflow-y-auto border-t">
                 <div className="p-3">
                   <h4 className="text-sm font-bold text-primary mb-2">전체 가맹점 리스트</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="space-y-2">
                     {BRANCHES.map((branch, index) => (
-                      <div key={index} className="flex items-center gap-2 bg-amber-50 p-2.5 rounded-lg">
-                        <MapPin className="w-3.5 h-3.5 text-brand-green shrink-0" />
-                        <span className="text-xs font-medium text-primary">선비칼국수 {branch.name}</span>
+                      <div key={index} className="flex items-start gap-2.5 bg-amber-50 p-3 rounded-lg">
+                        <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-primary">선비칼국수 {branch.name}</p>
+                          <p className="text-xs text-primary/50 mt-0.5 break-words">{branch.address}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
