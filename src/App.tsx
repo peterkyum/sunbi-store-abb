@@ -188,7 +188,6 @@ export default function App() {
 
   // --- App State ---
   const [activeTab, setActiveTab] = useState('home');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // --- Consulting State ---
   const [consultingPosts, setConsultingPosts] = useState<ConsultingPost[]>([]);
@@ -217,7 +216,6 @@ export default function App() {
 
   // --- Manual State ---
   const [manualItems, setManualItems] = useState<ManualItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedManual, setSelectedManual] = useState<ManualItem | null>(null);
   const [showCreateManual, setShowCreateManual] = useState(false);
   const [newManual, setNewManual] = useState({ category: Category.RECIPE, title: '', content: '', imageUrl: '', videoUrl: '' });
@@ -237,6 +235,8 @@ export default function App() {
 
   // --- Map State ---
   const [showMap, setShowMap] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState('');
 
   // --- A/S State ---
   const [showAsContacts, setShowAsContacts] = useState(false);
@@ -258,6 +258,36 @@ export default function App() {
   const [kbUploadLoading, setKbUploadLoading] = useState(false);
   const [kbUploadResult, setKbUploadResult] = useState('');
   const [kbNewEntry, setKbNewEntry] = useState({ question: '', answer: '', category: '' });
+
+  // --- Geolocation & Distance ---
+  const getDistanceKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  useEffect(() => {
+    if (showMap && !userLocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setLocationError('');
+        },
+        () => {
+          setLocationError('위치 정보를 가져올 수 없습니다.');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, [showMap, userLocation]);
+
+  const sortedBranches = userLocation
+    ? [...BRANCHES]
+        .map((b) => ({ ...b, distance: getDistanceKm(userLocation.lat, userLocation.lng, b.lat, b.lng) }))
+        .sort((a, b) => a.distance - b.distance)
+    : BRANCHES.map((b) => ({ ...b, distance: null as number | null }));
 
   // --- Auth Effects ---
   const loadUserProfile = async (uid: string, email?: string) => {
@@ -939,13 +969,6 @@ export default function App() {
     }
   };
 
-  const filteredManuals = manualItems.filter(item => {
-    const matchesCategory = !selectedCategory || item.category === selectedCategory;
-    const matchesSearch = !searchQuery ||
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.content.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
 
   const filteredPosts = consultingPosts.filter(post => {
     if (consultingFilter === 'all') return true;
@@ -1229,11 +1252,11 @@ export default function App() {
                 </h3>
                 
                 <div className="grid grid-cols-2 gap-3 mb-2">
-                   <button onClick={() => { setSelectedCategory(Category.RECIPE); document.getElementById('manual-search')?.scrollIntoView({behavior: 'smooth'}); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                   <button onClick={() => { /* TODO: navigate to recipe manuals */ }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
                      <FileText className="w-7 h-7 text-brand-green" />
                      <span className="font-bold text-sm text-primary">조리 매뉴얼</span>
                    </button>
-                   <button onClick={() => { setSelectedCategory(Category.VIDEO); document.getElementById('manual-search')?.scrollIntoView({behavior: 'smooth'}); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                   <button onClick={() => { /* TODO: navigate to video manuals */ }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
                      <PlayCircle className="w-7 h-7 text-brand-green" />
                      <span className="font-bold text-sm text-primary">영상</span>
                    </button>
@@ -1241,60 +1264,13 @@ export default function App() {
                      <ClipboardCheck className="w-7 h-7 text-brand-green" />
                      <span className="font-bold text-sm text-primary">선비칼국수 Q/A</span>
                    </button>
-                   <button onClick={() => { setSelectedCategory(Category.CHECKLIST); document.getElementById('manual-search')?.scrollIntoView({behavior: 'smooth'}); }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
+                   <button onClick={() => { /* TODO: navigate to checklist */ }} className="bg-[#FDFAF6] p-4 rounded-2xl text-center shadow-sm hover:bg-white transition-colors flex flex-col items-center justify-center gap-3">
                      <Upload className="w-7 h-7 text-brand-green" />
                      <span className="font-bold text-sm text-primary">체크리스트 업로드</span>
                    </button>
                 </div>
 
-                {/* Sub-search section for manuals (hidden until scrolled to) */}
-                <div id="manual-search" className="mt-6 bg-white/5 p-4 rounded-2xl">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold text-white">매뉴얼 목록</h4>
-                    {isManager && (
-                      <button onClick={() => setShowCreateManual(true)} className="text-xs text-brand-green flex items-center gap-1 font-bold bg-brand-green/10 px-2 py-1 rounded-md">
-                        <Plus className="w-3 h-3" /> 작성
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/40" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="검색..."
-                      className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border-0 focus:ring-2 focus:ring-accent text-sm text-primary font-bold"
-                    />
-                  </div>
-                  <div className="flex gap-2 mb-3 overflow-x-auto pb-1 no-scrollbar">
-                    <button
-                      onClick={() => setSelectedCategory(null)}
-                      className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${!selectedCategory ? 'bg-brand-green text-white' : 'bg-white/20 text-white hover:bg-white/30'}`}
-                    >전체</button>
-                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                      <button
-                        key={key}
-                        onClick={() => setSelectedCategory(key as Category)}
-                        className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedCategory === key ? 'bg-brand-green text-white' : 'bg-white/20 text-white hover:bg-white/30'}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                     {filteredManuals.length === 0 ? (
-                       <p className="col-span-2 text-white/40 text-xs text-center py-4 font-bold">등록된 매뉴얼이 없습니다.</p>
-                     ) : (
-                       filteredManuals.map(item => (
-                         <button key={item.id} onClick={() => handleViewManual(item)} className="bg-white p-3 rounded-xl text-left shadow-sm flex flex-col justify-between hover:bg-gray-50 transition-colors">
-                            <div className="text-xs font-bold text-brand-green mb-1">{CATEGORY_LABELS[item.category]}</div>
-                            <p className="text-sm font-bold text-primary line-clamp-2 leading-tight">{item.title}</p>
-                         </button>
-                       ))
-                     )}
-                  </div>
-                </div>
+
               </div>
 
               {/* Branch Map Section (Matches the bottom image) */}
@@ -1882,8 +1858,8 @@ export default function App() {
               </div>
               <div style={{ height: '45%' }}>
                 <MapContainer
-                  center={[37.0, 127.5]}
-                  zoom={7}
+                  center={userLocation ? [userLocation.lat, userLocation.lng] : [37.0, 127.5]}
+                  zoom={userLocation ? 11 : 7}
                   style={{ height: '100%', width: '100%' }}
                 >
                   <TileLayer
@@ -1902,13 +1878,23 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-y-auto border-t">
                 <div className="p-3">
-                  <h4 className="text-sm font-bold text-primary mb-2">전체 가맹점 리스트</h4>
+                  <h4 className="text-sm font-bold text-primary mb-2">
+                    {userLocation ? '가까운 순서' : '전체 가맹점 리스트'}
+                    {locationError && <span className="text-xs font-normal text-red-400 ml-2">{locationError}</span>}
+                  </h4>
                   <div className="space-y-2">
-                    {BRANCHES.map((branch, index) => (
+                    {sortedBranches.map((branch, index) => (
                       <div key={index} className="flex items-start gap-2.5 bg-amber-50 p-3 rounded-lg">
                         <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-primary">선비칼국수 {branch.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold text-primary">선비칼국수 {branch.name}</p>
+                            {branch.distance != null && (
+                              <span className="text-xs text-brand-green font-semibold whitespace-nowrap">
+                                {branch.distance < 1 ? `${Math.round(branch.distance * 1000)}m` : `${branch.distance.toFixed(1)}km`}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-primary/50 mt-0.5 break-words">{branch.address}</p>
                         </div>
                       </div>
