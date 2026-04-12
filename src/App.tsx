@@ -1072,10 +1072,10 @@ export default function App() {
                   {authLoading ? '로그인 중...' : '로그인하기'}
                 </button>
                 
-                <div className="flex items-center justify-center gap-4 text-xs font-bold text-white/70 mt-8 tracking-wide">
-                  <button type="button" className="hover:text-white transition-colors">아이디 찾기</button>
-                  <span className="text-white/30">|</span>
-                  <button type="button" className="hover:text-white transition-colors">비밀번호 재설정</button>
+                <div className="flex items-center justify-center gap-4 text-xs font-bold text-[#B0B8C1] mt-8 tracking-wide">
+                  <button type="button" className="hover:text-[#191F28] transition-colors">아이디 찾기</button>
+                  <span className="text-[#B0B8C1]">|</span>
+                  <button type="button" className="hover:text-[#191F28] transition-colors">비밀번호 재설정</button>
                 </div>
               </form>
           </div>
@@ -1099,9 +1099,6 @@ export default function App() {
             <span className="text-text text-xs font-bold ml-1 sm:ml-0">{userProfile?.storeName} {userProfile?.name} {userProfile?.position}</span>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={handleLogout} className="text-xs text-white font-bold bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-full transition-colors">
-              로그아웃
-             </button>
           </div>
         </div>
       </header>
@@ -1196,7 +1193,7 @@ export default function App() {
 
               {/* Manual Grid */}
               <div>
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2 px-1">
+                <h3 className="text-lg font-bold text-[#191F28] mb-3 flex items-center gap-2 px-1">
                    📚 선비칼국수 매뉴얼
                 </h3>
                 
