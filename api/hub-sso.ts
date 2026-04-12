@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!linkResp.ok) return res.status(500).json({ error: 'Link gen failed' })
 
     const linkData = await linkResp.json()
-    const tokenHash = linkData.properties?.hashed_token
+    const tokenHash = linkData.hashed_token || linkData.properties?.hashed_token
     if (!tokenHash) return res.status(500).json({ error: 'No token_hash' })
 
     // 4. 세션 발급
