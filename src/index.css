@@ -1,22 +1,40 @@
 @import "tailwindcss";
 
 @font-face {
-    font-family: 'Gukdetteokbokki';
-    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_twelve@1.1/Gukdetteokbokki.woff') format('woff');
-    font-weight: normal;
+    font-family: 'SDKukdetopokki';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_two@1.0/SDKukdetopokki.woff') format('woff');
+    font-weight: 700;
     font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'SDKukdetopokki';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/SDKukdetopokki-aLt00.woff') format('woff');
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
 }
 
 @theme {
-  --font-sans: "Gukdetteokbokki", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-primary: #4a3a32; /* Dark Brown from design */
-  --color-accent: #ffeb3b;  /* Yellow from design */
-  --color-brand-green: #8bc34a; /* Brand Green */
+  --font-sans: "SDKukdetopokki", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #8B6914;
+  --color-accent: #8B6914;
+  --color-brand-green: #00C853;
+  --color-surface: #ffffff;
+  --color-bg: #F4F4F4;
+  --color-text: #191F28;
+  --color-text-secondary: #8B95A1;
+  --color-text-hint: #B0B8C1;
+  --color-divider: #F2F4F6;
+  --color-error: #FF3B30;
 }
 
 @layer base {
   body {
-    @apply bg-primary text-white font-sans;
+    background-color: #F4F4F4;
+    color: #191F28;
+    font-family: var(--font-sans);
   }
 }
 
@@ -26,7 +44,7 @@
 .bg-amber-50 input,
 .bg-amber-50 textarea,
 .bg-amber-50 select {
-  color: #4a3a32;
+  color: #191F28;
 }
 
 .markdown-body p {

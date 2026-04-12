@@ -1015,50 +1015,50 @@ export default function App() {
   // --- Login / Sign Up Page ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-primary flex items-center justify-center p-4">
+      <div className="min-h-screen bg-bg flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md"
         >
           <div className="text-center mb-10">
-            <h1 className="text-4xl font-bold text-white mb-6 tracking-widest flex items-center justify-center gap-2">
+            <h1 className="text-4xl font-bold text-primary mb-6 tracking-widest flex items-center justify-center gap-2">
               선비칼국수
-              <div className="inline-flex items-center justify-center w-14 h-14 border-2 border-white rounded-full">
-                <Leaf className="w-8 h-8 text-white" />
+              <div className="inline-flex items-center justify-center w-14 h-14 border-2 border-primary/30 rounded-full">
+                <Leaf className="w-8 h-8 text-primary" />
               </div>
             </h1>
-            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">점주 파트너 센터</h2>
-            <p className="text-accent font-bold text-sm tracking-widest">SUNBI KALGUKSU PARTNER</p>
+            <h2 className="text-2xl font-bold text-text mb-2 tracking-tight">점주 파트너 센터</h2>
+            <p className="text-primary font-bold text-sm tracking-widest">SUNBI KALGUKSU PARTNER</p>
           </div>
 
-          <div className="w-full">
+          <div className="w-full bg-white rounded-2xl p-8 shadow-sm">
             <form onSubmit={handleLogin} className="space-y-6">
                 {authError && (
-                  <div className="bg-red-500/20 text-red-100 border border-red-500/50 p-3 rounded-lg text-sm flex items-center gap-2">
+                  <div className="bg-error/10 text-error border border-error/20 p-3 rounded-xl text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     {authError}
                   </div>
                 )}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">이메일 주소</label>
+                    <label className="block text-xs font-bold text-text-secondary mb-1.5 ml-1">이메일 주소</label>
                     <input
                       type="email"
                       value={loginForm.email}
                       onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      className="w-full px-5 py-3.5 rounded-2xl bg-bg border border-divider text-text placeholder-text-hint focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all font-medium"
                       placeholder="이메일을 입력하세요"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-white/80 mb-1.5 ml-1">비밀번호</label>
+                    <label className="block text-xs font-bold text-text-secondary mb-1.5 ml-1">비밀번호</label>
                     <input
                       type="password"
                       value={loginForm.password}
                       onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                      className="w-full px-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                      className="w-full px-5 py-3.5 rounded-2xl bg-bg border border-divider text-text placeholder-text-hint focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all font-medium"
                       placeholder="비밀번호를 입력하세요"
                       required
                     />
@@ -1067,7 +1067,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full bg-accent text-primary py-4 rounded-xl font-bold text-lg hover:bg-yellow-300 transition-colors disabled:opacity-50 mt-2 shadow-lg"
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg hover:bg-primary/90 transition-colors disabled:opacity-50 mt-2"
                 >
                   {authLoading ? '로그인 중...' : '로그인하기'}
                 </button>
@@ -1088,18 +1088,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-primary">
       {/* Header */}
-      <header className="bg-primary/95 backdrop-blur-sm sticky top-0 z-40 border-b-4 border-brand-green">
+      <header className="bg-white sticky top-0 z-40 border-b border-divider">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-white">
-              <Leaf className="w-5 h-5 text-white" />
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-primary/20">
+              <Leaf className="w-5 h-5 text-primary" />
             </div>
-            <h1 className="text-lg font-bold text-white tracking-widest hidden sm:block">선비칼국수</h1>
-            <span className="text-white/60 text-xs ml-2 hidden sm:block">|</span>
-            <span className="text-white text-xs font-bold ml-1 sm:ml-0">{userProfile?.storeName} {userProfile?.name} {userProfile?.position}</span>
+            <h1 className="text-lg font-bold text-primary tracking-widest hidden sm:block">선비칼국수</h1>
+            <span className="text-text-hint text-xs ml-2 hidden sm:block">|</span>
+            <span className="text-text text-xs font-bold ml-1 sm:ml-0">{userProfile?.storeName} {userProfile?.name} {userProfile?.position}</span>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={handleLogout} className="text-xs text-primary font-bold bg-accent hover:bg-yellow-400 px-4 py-1.5 rounded-full transition-colors shadow-sm">
+             <button onClick={handleLogout} className="text-xs text-white font-bold bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-full transition-colors">
               로그아웃
              </button>
           </div>
@@ -1121,11 +1121,11 @@ export default function App() {
               {/* Welcome Banner */}
               <div className="bg-gradient-to-br from-[#FDFBEA] to-[#F2F7E1] rounded-2xl p-6 shadow-sm">
                 <p className="text-brand-green font-bold text-xs mb-1">본사 파트너 센터</p>
-                <h2 className="text-2xl font-bold text-[#5c4a40] mb-2 leading-tight">
+                <h2 className="text-2xl font-bold text-[#191F28] mb-2 leading-tight">
                   <span className="text-brand-green">{userProfile?.name} {userProfile?.position}님</span><br/>
                   반갑습니다.
                 </h2>
-                <p className="text-[#5c4a40]/70 text-sm">
+                <p className="text-[#191F28]/70 text-sm">
                   본사 임직원 전용 관리 모드입니다. 매장 지원 및 관리에 만전을 기해 주시기 바랍니다.
                 </p>
               </div>
@@ -1166,7 +1166,7 @@ export default function App() {
                       <button onClick={() => setShowBusinessReg(true)} className="bg-accent px-3 py-1 text-xs font-bold rounded-full text-primary hover:bg-yellow-400 transition">사업자 등록</button>
                       <button onClick={() => setShowCreateNotice(true)} className="bg-accent px-3 py-1 text-xs font-bold rounded-full text-primary hover:bg-yellow-400 transition">공지 작성</button>
                       <button onClick={() => setShowKbManagement(true)} className="bg-brand-green text-white px-3 py-1 text-xs font-bold rounded-full hover:bg-green-600 transition">Q&A 정보 등록</button>
-                      <button onClick={() => { setShowUserManagement(true); loadAllUsers(); }} className="bg-[#4a3a32] text-white px-3 py-1 text-xs font-bold rounded-full flex gap-1 items-center hover:bg-primary transition"><Users className="w-3 h-3"/>계정 관리</button>
+                      <button onClick={() => { setShowUserManagement(true); loadAllUsers(); }} className="bg-[#8B6914] text-white px-3 py-1 text-xs font-bold rounded-full flex gap-1 items-center hover:bg-primary transition"><Users className="w-3 h-3"/>계정 관리</button>
                     </div>
                   )}
                 </div>
@@ -1385,7 +1385,7 @@ export default function App() {
                 {(isManager || selectedPost.authorUid === user?.id) && (
                   <button
                     onClick={() => handleDeletePost(selectedPost.id)}
-                    className="mt-3 text-[#5d4037]/70 text-sm flex items-center gap-1 hover:text-[#5d4037]"
+                    className="mt-3 text-[#6B4F0E]/70 text-sm flex items-center gap-1 hover:text-[#6B4F0E]"
                   >
                     <Trash2 className="w-4 h-4" />
                     삭제
@@ -1565,7 +1565,7 @@ export default function App() {
                         setDeleteNoticeId(selectedNotice.id);
                         setShowDeleteNoticeConfirm(true);
                       }}
-                      className="flex items-center gap-1 text-sm text-[#5d4037]/70 hover:text-[#5d4037]"
+                      className="flex items-center gap-1 text-sm text-[#6B4F0E]/70 hover:text-[#6B4F0E]"
                     >
                       <Trash2 className="w-4 h-4" />
                       삭제
@@ -1718,7 +1718,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={handleDeleteNotice}
-                  className="flex-1 py-2 rounded-xl bg-[#5d4037] text-white text-sm font-medium hover:bg-[#4e342e]"
+                  className="flex-1 py-2 rounded-xl bg-[#6B4F0E] text-white text-sm font-medium hover:bg-[#6B4F0E]"
                 >
                   삭제
                 </button>
@@ -1925,7 +1925,7 @@ export default function App() {
             >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-[#5d4037]/70 flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-[#6B4F0E]/70 flex items-center gap-2">
                     <AlertCircle className="w-5 h-5" />
                     SOS 긴급문의
                   </h3>
@@ -1951,7 +1951,7 @@ export default function App() {
                         type="text"
                         value={sosForm.title}
                         onChange={(e) => setSosForm({ ...sosForm, title: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-[#ffeb3b] text-sm"
+                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-[#BFAE4A] text-sm"
                         placeholder="긴급 상황을 간단히 입력"
                       />
                     </div>
@@ -1960,14 +1960,14 @@ export default function App() {
                       <textarea
                         value={sosForm.message}
                         onChange={(e) => setSosForm({ ...sosForm, message: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-[#ffeb3b] text-sm min-h-[100px]"
+                        className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-[#BFAE4A] text-sm min-h-[100px]"
                         placeholder="상황을 자세히 설명해 주세요"
                       />
                     </div>
                     <button
                       onClick={handleSosSubmit}
                       disabled={sosLoading || !sosForm.title || !sosForm.message}
-                      className="w-full bg-[#5d4037] text-white py-3 rounded-xl font-bold hover:bg-[#4e342e] transition-colors disabled:opacity-50"
+                      className="w-full bg-[#6B4F0E] text-white py-3 rounded-xl font-bold hover:bg-[#6B4F0E] transition-colors disabled:opacity-50"
                     >
                       {sosLoading ? '전송 중...' : '긴급 문의 접수'}
                     </button>
@@ -2136,7 +2136,7 @@ export default function App() {
                         setDeleteManualId(selectedManual.id);
                         setShowDeleteManualConfirm(true);
                       }}
-                      className="flex items-center gap-1 text-sm text-[#5d4037]/70 hover:text-[#5d4037]"
+                      className="flex items-center gap-1 text-sm text-[#6B4F0E]/70 hover:text-[#6B4F0E]"
                     >
                       <Trash2 className="w-4 h-4" />
                       삭제
@@ -2238,7 +2238,7 @@ export default function App() {
                         />
                       </label>
                       {manualFile && (
-                        <button onClick={() => setManualFile(null)} className="text-[#5d4037]/60 hover:text-[#5d4037]/70">
+                        <button onClick={() => setManualFile(null)} className="text-[#6B4F0E]/60 hover:text-[#6B4F0E]/70">
                           <X className="w-4 h-4" />
                         </button>
                       )}
@@ -2382,7 +2382,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={handleDeleteManual}
-                  className="flex-1 py-2 rounded-xl bg-[#5d4037] text-white text-sm font-medium hover:bg-[#4e342e]"
+                  className="flex-1 py-2 rounded-xl bg-[#6B4F0E] text-white text-sm font-medium hover:bg-[#6B4F0E]"
                 >
                   삭제
                 </button>
@@ -2445,7 +2445,7 @@ export default function App() {
                                 setShowQaChat(false);
                                 setShowSosModal(true);
                               }}
-                              className="mt-2 bg-[#5d4037] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#4e342e] transition-colors flex items-center gap-1"
+                              className="mt-2 bg-[#6B4F0E] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#6B4F0E] transition-colors flex items-center gap-1"
                             >
                               <AlertCircle className="w-3 h-3" />
                               슈퍼바이저 1:1 문의하기
@@ -2529,7 +2529,7 @@ export default function App() {
                 <div className="bg-amber-50 p-4 rounded-xl mb-4">
                   <h4 className="font-bold text-primary mb-3">새 계정 생성</h4>
                   {createUserError && (
-                    <div className="bg-[#5d4037]/10 text-[#5d4037] p-2 rounded-lg mb-3 text-xs flex items-center gap-1">
+                    <div className="bg-[#6B4F0E]/10 text-[#6B4F0E] p-2 rounded-lg mb-3 text-xs flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
                       {createUserError}
                     </div>
@@ -2634,7 +2634,7 @@ export default function App() {
                           <p className="text-xs text-primary/40">{u.email}</p>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          u.role === 'manager' ? 'bg-[#ffeb3b]/30 text-[#5d4037]' : 'bg-blue-100 text-blue-700'
+                          u.role === 'manager' ? 'bg-[#BFAE4A]/30 text-[#6B4F0E]' : 'bg-blue-100 text-blue-700'
                         }`}>
                           {u.role === 'manager' ? '관리자' : '점주'}
                         </span>
@@ -2715,11 +2715,11 @@ export default function App() {
                 </div>
 
                 {/* CSV Upload */}
-                <div className="bg-[#8bc34a]/10 p-4 rounded-xl mb-4">
+                <div className="bg-[#00C853]/10 p-4 rounded-xl mb-4">
                   <h4 className="font-bold text-primary mb-3">CSV 일괄 업로드</h4>
                   <p className="text-xs text-primary/50 mb-3">CSV 파일에 question, answer, category (선택) 열이 필요합니다.</p>
                   <div className="flex items-center gap-2 mb-3">
-                    <label className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-primary/30 cursor-pointer hover:bg-[#8bc34a]/20 transition-colors">
+                    <label className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-primary/30 cursor-pointer hover:bg-[#00C853]/20 transition-colors">
                       <Upload className="w-4 h-4 text-primary/60" />
                       <span className="text-sm text-primary/60">{kbCsvFile ? kbCsvFile.name : 'CSV 파일 선택'}</span>
                       <input
@@ -2733,7 +2733,7 @@ export default function App() {
                   <button
                     onClick={handleKbCsvUpload}
                     disabled={!kbCsvFile || kbUploadLoading}
-                    className="w-full bg-[#8bc34a] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#7cb342] disabled:opacity-50"
+                    className="w-full bg-[#00C853] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#00A844] disabled:opacity-50"
                   >
                     {kbUploadLoading ? '업로드 중...' : '업로드'}
                   </button>
