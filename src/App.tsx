@@ -23,6 +23,7 @@ import {
   Upload,
   Eye,
   MapPin,
+  ChevronLeft,
   ChevronRight,
   PlayCircle,
   Edit,
@@ -1248,7 +1249,12 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-primary">1:1 문의</h2>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setActiveTab('home')} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-divider hover:bg-[#F2F4F6] transition-colors">
+                    <ChevronLeft className="w-5 h-5 text-primary" />
+                  </button>
+                  <h2 className="text-xl font-bold text-primary">1:1 문의</h2>
+                </div>
                 <button
                   onClick={() => setShowCreatePost(true)}
                   className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1 hover:bg-primary/90 transition-colors"
@@ -1310,6 +1316,22 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Bottom Tab Bar */}
+      <nav className="sticky bottom-0 z-40 bg-white border-t border-divider flex">
+        {MENU_ITEMS.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
+              activeTab === item.id ? 'text-primary' : 'text-[#B0B8C1]'
+            }`}
+          >
+            <item.icon className="w-5 h-5" />
+            <span className="text-xs font-bold">{item.label}</span>
+          </button>
+        ))}
+      </nav>
 
       {/* ===== MODALS ===== */}
 
