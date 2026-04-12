@@ -351,36 +351,31 @@ export default function App() {
       }
     });
 
-    // Hub SSO: iframe 내에서 허브 토큰 수신 시 로컬 세션 자동 설정
-    const HUB_ORIGIN = 'https://sunbi-hub.vercel.app';
-    let ssoHandled = false;
-    const handleHubSSO = async (e: MessageEvent) => {
-      if (e.origin !== HUB_ORIGIN) return;
-      if (!e.data || e.data.type !== 'SUNBI_HUB_SESSION') return;
-      if (ssoHandled) return;
-      ssoHandled = true;
-
-      try {
-        const resp = await fetch('/api/hub-sso', {
+    // Hub SSO: URL hash에서 토큰 읽기 (#hub_token=xxx)
+    const hash = window.location.hash || '';
+    if (hash.includes('hub_token=')) {
+      const hubToken = hash.split('hub_token=')[1];
+      if (hubToken) {
+        history.replaceState(null, '', window.location.pathname);
+        fetch('/api/hub-sso', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hub_token: e.data.access_token }),
-        });
-        const data = await resp.json();
-        if (data.access_token && data.refresh_token) {
-          await supabase.auth.setSession({
-            access_token: data.access_token,
-            refresh_token: data.refresh_token,
-          });
-        }
-      } catch { /* SSO 실패 시 수동 로그인 폴백 */ }
-    };
-    window.addEventListener('message', handleHubSSO);
+          body: JSON.stringify({ hub_token: hubToken }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.access_token && data.refresh_token) {
+              supabase.auth.setSession({
+                access_token: data.access_token,
+                refresh_token: data.refresh_token,
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    }
 
-    return () => {
-      subscription.unsubscribe();
-      window.removeEventListener('message', handleHubSSO);
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   // --- Load Data ---
