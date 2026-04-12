@@ -335,13 +335,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadUserProfile(session.user.id, session.user.email);
-      }
-      setIsAuthReady(true);
-    });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -351,29 +344,43 @@ export default function App() {
       }
     });
 
-    // Hub SSO: URL hash에서 토큰 읽기 (#hub_token=xxx)
     const hash = window.location.hash || '';
-    if (hash.includes('hub_token=')) {
-      const hubToken = hash.split('hub_token=')[1];
-      if (hubToken) {
-        history.replaceState(null, '', window.location.pathname);
-        fetch('/api/hub-sso', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hub_token: hubToken }),
-        })
-          .then(r => r.json())
-          .then(data => {
+    const hasHubToken = hash.includes('hub_token=');
+
+    const initAuth = async () => {
+      // Hub SSO: URL hash에서 토큰 읽기 (#hub_token=xxx)
+      if (hasHubToken) {
+        const hubToken = hash.split('hub_token=')[1];
+        if (hubToken) {
+          history.replaceState(null, '', window.location.pathname);
+          try {
+            const r = await fetch('/api/hub-sso', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hub_token: hubToken }),
+            });
+            const data = await r.json();
             if (data.access_token && data.refresh_token) {
-              supabase.auth.setSession({
+              await supabase.auth.setSession({
                 access_token: data.access_token,
                 refresh_token: data.refresh_token,
               });
             }
-          })
-          .catch(() => {});
+          } catch {
+            // SSO 실패 시 기존 세션으로 폴백
+          }
+        }
       }
-    }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadUserProfile(session.user.id, session.user.email);
+      }
+      setIsAuthReady(true);
+    };
+
+    initAuth();
 
     return () => subscription.unsubscribe();
   }, []);
