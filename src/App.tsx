@@ -349,10 +349,12 @@ export default function App() {
       // 허브 토큰으로 직접 세션 설정 (같은 Supabase)
       const hash = window.location.hash || '';
       if (hash.includes('hub_token=')) {
-        const hubToken = hash.split('hub_token=')[1];
-        if (hubToken) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get('hub_token');
+        const refreshToken = params.get('hub_refresh') || accessToken;
+        if (accessToken) {
           history.replaceState(null, '', window.location.pathname);
-          await supabase.auth.setSession({ access_token: hubToken, refresh_token: hubToken });
+          await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken! });
         }
       }
 
