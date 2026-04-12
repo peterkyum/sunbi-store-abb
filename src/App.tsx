@@ -1003,7 +1003,7 @@ export default function App() {
   // --- Loading Screen ---
   if (!isAuthReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-amber-50">
+      <div className="min-h-screen flex items-center justify-center bg-bg">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-primary font-bold">로딩 중...</p>
@@ -1086,7 +1086,7 @@ export default function App() {
 
   // --- Main App ---
   return (
-    <div className="min-h-screen bg-primary">
+    <div className="min-h-screen bg-bg">
       {/* Header */}
       <header className="bg-white sticky top-0 z-40 border-b border-divider">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -1116,7 +1116,7 @@ export default function App() {
               className="space-y-4"
             >
               {/* Welcome Banner */}
-              <div className="bg-gradient-to-br from-[#FDFBEA] to-[#F2F7E1] rounded-2xl p-6 shadow-sm">
+              <div className="bg-gradient-to-br from-amber-50 to-[#F2F7E1] rounded-2xl p-6 shadow-sm">
                 <p className="text-brand-green font-bold text-xs mb-1">본사 파트너 센터</p>
                 <h2 className="text-2xl font-bold text-[#191F28] mb-2 leading-tight">
                   <span className="text-brand-green">{userProfile?.name} {userProfile?.position}님</span><br/>
@@ -1131,7 +1131,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setActiveTab('consulting')}
-                  className="bg-accent text-primary p-5 rounded-2xl text-center hover:bg-yellow-400 transition-colors shadow-sm flex flex-col items-center justify-center gap-2"
+                  className="bg-amber-50 text-[#191F28] p-5 rounded-2xl text-center hover:bg-amber-100 transition-colors shadow-sm flex flex-col items-center justify-center gap-2"
                 >
                   <MessageSquare className="w-6 h-6 text-primary/70" />
                   <div>
@@ -1141,7 +1141,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setShowAsContacts(true)}
-                  className="bg-accent text-primary p-5 rounded-2xl text-center hover:bg-yellow-400 transition-colors shadow-sm flex flex-col items-center justify-center gap-2"
+                  className="bg-amber-50 text-[#191F28] p-5 rounded-2xl text-center hover:bg-amber-100 transition-colors shadow-sm flex flex-col items-center justify-center gap-2"
                 >
                   <Phone className="w-6 h-6 text-primary/70" />
                   <div>
@@ -1160,8 +1160,8 @@ export default function App() {
                   </h3>
                   {isManager && (
                     <div className="flex gap-2 flex-wrap">
-                      <button onClick={() => setShowBusinessReg(true)} className="bg-accent px-3 py-1 text-xs font-bold rounded-full text-primary hover:bg-yellow-400 transition">사업자 등록</button>
-                      <button onClick={() => setShowCreateNotice(true)} className="bg-accent px-3 py-1 text-xs font-bold rounded-full text-primary hover:bg-yellow-400 transition">공지 작성</button>
+                      <button onClick={() => setShowBusinessReg(true)} className="bg-primary text-white px-3 py-1 text-xs font-bold rounded-full hover:bg-primary/90 transition">사업자 등록</button>
+                      <button onClick={() => setShowCreateNotice(true)} className="bg-primary text-white px-3 py-1 text-xs font-bold rounded-full hover:bg-primary/90 transition">공지 작성</button>
                       <button onClick={() => setShowKbManagement(true)} className="bg-brand-green text-white px-3 py-1 text-xs font-bold rounded-full hover:bg-green-600 transition">Q&A 정보 등록</button>
                       <button onClick={() => { setShowUserManagement(true); loadAllUsers(); }} className="bg-[#8B6914] text-white px-3 py-1 text-xs font-bold rounded-full flex gap-1 items-center hover:bg-primary transition"><Users className="w-3 h-3"/>계정 관리</button>
                     </div>
@@ -1223,7 +1223,7 @@ export default function App() {
               <div className="mt-4">
                 <div className="bg-[#FDFBEA] rounded-2xl p-4 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 rounded-full bg-accent flex flex-col items-center justify-center shrink-0">
+                     <div className="w-10 h-10 rounded-full bg-primary/10 flex flex-col items-center justify-center shrink-0">
                         <MapPin className="w-5 h-5 text-primary" />
                      </div>
                      <div>
@@ -1231,7 +1231,7 @@ export default function App() {
                        <p className="text-base font-bold text-primary leading-none">지점 리스트 보기</p>
                      </div>
                   </div>
-                  <button onClick={() => setShowMap(true)} className="bg-accent px-4 py-2 rounded-xl text-sm font-bold text-primary shadow-sm hover:bg-yellow-400 shrink-0">
+                  <button onClick={() => setShowMap(true)} className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-primary/90 shrink-0">
                     지도 보기
                   </button>
                 </div>
