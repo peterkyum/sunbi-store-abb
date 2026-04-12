@@ -350,7 +350,37 @@ export default function App() {
         setUserProfile(null);
       }
     });
-    return () => subscription.unsubscribe();
+
+    // Hub SSO: iframe 내에서 허브 토큰 수신 시 로컬 세션 자동 설정
+    const HUB_ORIGIN = 'https://sunbi-hub.vercel.app';
+    let ssoHandled = false;
+    const handleHubSSO = async (e: MessageEvent) => {
+      if (e.origin !== HUB_ORIGIN) return;
+      if (!e.data || e.data.type !== 'SUNBI_HUB_SESSION') return;
+      if (ssoHandled) return;
+      ssoHandled = true;
+
+      try {
+        const resp = await fetch('/api/hub-sso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hub_token: e.data.access_token }),
+        });
+        const data = await resp.json();
+        if (data.access_token && data.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+          });
+        }
+      } catch { /* SSO 실패 시 수동 로그인 폴백 */ }
+    };
+    window.addEventListener('message', handleHubSSO);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('message', handleHubSSO);
+    };
   }, []);
 
   // --- Load Data ---
