@@ -89,7 +89,7 @@ interface ConsultingPost {
 }
 
 interface UserProfile {
-  uid: string;
+  user_id: string;
   email: string;
   name: string;
   role: 'manager' | 'owner';
@@ -289,21 +289,21 @@ export default function App() {
     : BRANCHES.map((b) => ({ ...b, distance: null as number | null }));
 
   // --- Auth Effects ---
-  const loadUserProfile = async (uid: string, email?: string) => {
+  const loadUserProfile = async (user_id: string, email?: string) => {
     // Try by uid first, then by email as fallback
-    let { data } = await supabase.from('users').select('*').eq('uid', uid).maybeSingle();
+    let { data } = await supabase.from('user_roles').select('*').eq('user_id', uid).maybeSingle();
     if (!data && email) {
-      const result = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      const result = await supabase.from('user_roles').select('*').eq('email', email).maybeSingle();
       data = result.data;
       // Update uid if found by email
       if (data) {
-        await supabase.from('users').update({ uid }).eq('email', email);
+        await supabase.from('user_roles').update({ uid }).eq('email', email);
       }
     }
 
     if (data) {
       setUserProfile({
-        uid: data.uid || uid,
+        user_id: data.uid || uid,
         email: data.email,
         name: data.name,
         role: data.role,
@@ -322,7 +322,7 @@ export default function App() {
           storeName: hqAccount.storeName,
           position: hqAccount.position,
         };
-        await supabase.from('users').upsert({
+        await supabase.from('user_roles').upsert({
           uid,
           email: hqAccount.email,
           name: hqAccount.name,
@@ -345,31 +345,14 @@ export default function App() {
       }
     });
 
-    const hash = window.location.hash || '';
-    const hasHubToken = hash.includes('hub_token=');
-
     const initAuth = async () => {
-      // Hub SSO: URL hash에서 토큰 읽기 (#hub_token=xxx)
-      if (hasHubToken) {
+      // 허브 토큰으로 직접 세션 설정 (같은 Supabase)
+      const hash = window.location.hash || '';
+      if (hash.includes('hub_token=')) {
         const hubToken = hash.split('hub_token=')[1];
         if (hubToken) {
           history.replaceState(null, '', window.location.pathname);
-          try {
-            const r = await fetch('/api/hub-sso', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ hub_token: hubToken }),
-            });
-            const data = await r.json();
-            if (data.access_token && data.refresh_token) {
-              await supabase.auth.setSession({
-                access_token: data.access_token,
-                refresh_token: data.refresh_token,
-              });
-            }
-          } catch {
-            // SSO 실패 시 기존 세션으로 폴백
-          }
+          await supabase.auth.setSession({ access_token: hubToken, refresh_token: hubToken });
         }
       }
 
@@ -449,7 +432,7 @@ export default function App() {
   const loadNotices = async () => {
     try {
       const { data, error } = await supabase
-        .from('notices')
+        .from('hq_notices')
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -495,10 +478,10 @@ export default function App() {
 
   const loadAllUsers = async () => {
     try {
-      const { data, error } = await supabase.from('users').select('*');
+      const { data, error } = await supabase.from('user_roles').select('*');
       if (error) throw error;
       const users: UserProfile[] = (data ?? []).map((row: any) => ({
-        uid: row.uid,
+        user_id: row.uid,
         email: row.email,
         name: row.name,
         role: row.role,
@@ -619,7 +602,7 @@ export default function App() {
         title: sosForm.title,
         message: sosForm.message,
         author: userProfile.name,
-        author_uid: user?.id,
+        author_user_id: user?.id,
         store_name: userProfile.storeName,
         created_at: new Date().toISOString(),
         status: 'pending',
@@ -656,7 +639,7 @@ export default function App() {
   const handleCreateNotice = async () => {
     if (!newNotice.title || !newNotice.content || !userProfile) return;
     try {
-      await supabase.from('notices').insert({
+      await supabase.from('hq_notices').insert({
         title: newNotice.title,
         content: newNotice.content,
         author: userProfile.name,
@@ -676,8 +659,8 @@ export default function App() {
     setShowNoticeModal(true);
     // Increment view count
     try {
-      const { data: currentNotice } = await supabase.from('notices').select('view_count').eq('id', notice.id).single();
-      await supabase.from('notices').update({
+      const { data: currentNotice } = await supabase.from('hq_notices').select('view_count').eq('id', notice.id).single();
+      await supabase.from('hq_notices').update({
         view_count: (currentNotice?.view_count ?? 0) + 1,
       }).eq('id', notice.id);
     } catch (error) {
@@ -688,7 +671,7 @@ export default function App() {
   const handleEditNotice = async () => {
     if (!editNotice.title || !editNotice.content) return;
     try {
-      await supabase.from('notices').update({
+      await supabase.from('hq_notices').update({
         title: editNotice.title,
         content: editNotice.content,
       }).eq('id', editNotice.id);
@@ -704,7 +687,7 @@ export default function App() {
   const handleDeleteNotice = async () => {
     if (!deleteNoticeId) return;
     try {
-      await supabase.from('notices').delete().eq('id', deleteNoticeId);
+      await supabase.from('hq_notices').delete().eq('id', deleteNoticeId);
       setShowDeleteNoticeConfirm(false);
       setDeleteNoticeId('');
       setShowNoticeModal(false);
@@ -898,7 +881,7 @@ export default function App() {
 
       // Insert user profile into users table
       const uid = authData.user?.id || '';
-      await supabase.from('users').insert({
+      await supabase.from('user_roles').insert({
         uid,
         email: createUserForm.email,
         name: createUserForm.name,
