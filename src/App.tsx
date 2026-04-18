@@ -35,7 +35,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import { supabase } from './supabase';
 
@@ -123,14 +122,10 @@ interface ManualItem {
   viewCount: number;
 }
 
-// HQ accounts (본사 계정)
-const HQ_ACCOUNTS = [
-  { email: 'peterkim9427@gmail.com', pw: 'sunbi1234', name: '김연겸', position: '본부장', role: 'manager', storeName: '본사' },
-  { email: 'kang@sunbi.com', pw: 'sunbi1234', name: '강한빛', position: '대표', role: 'manager', storeName: '본사' },
-  { email: 'byun@sunbi.com', pw: 'sunbi1234', name: '변우석', position: '이사', role: 'manager', storeName: '본사' },
-  { email: 'yoon@sunbi.com', pw: 'sunbi1234', name: '윤석진', position: '팀장', role: 'manager', storeName: '본사' },
-  { email: 'gil@sunbi.com', pw: 'sunbi1234', name: '길태훈', position: '팀장', role: 'manager', storeName: '본사' }
-];
+// DB role → 앱 role 매핑
+const MANAGER_ROLES = ['admin', 'hq', 'staff'];
+const toAppRole = (dbRole: string): 'manager' | 'owner' =>
+  MANAGER_ROLES.includes(dbRole) ? 'manager' : 'owner';
 
 // Branches (39 entries)
 const BRANCHES = [
@@ -289,49 +284,23 @@ export default function App() {
     : BRANCHES.map((b) => ({ ...b, distance: null as number | null }));
 
   // --- Auth Effects ---
-  const loadUserProfile = async (user_id: string, email?: string) => {
-    // Try by uid first, then by email as fallback
-    let { data } = await supabase.from('user_roles').select('*').eq('user_id', uid).maybeSingle();
+  const loadUserProfile = async (userId: string, email?: string) => {
+    // user_id로 조회, 없으면 email로 fallback
+    let { data } = await supabase.from('user_roles').select('*').eq('user_id', userId).maybeSingle();
     if (!data && email) {
       const result = await supabase.from('user_roles').select('*').eq('email', email).maybeSingle();
       data = result.data;
-      // Update uid if found by email
-      if (data) {
-        await supabase.from('user_roles').update({ uid }).eq('email', email);
-      }
     }
 
     if (data) {
       setUserProfile({
-        user_id: data.uid || uid,
+        user_id: data.user_id || userId,
         email: data.email,
-        name: data.name,
-        role: data.role,
-        storeName: data.store_name,
-        position: data.position,
+        name: data.name || data.branch_name || '',
+        role: toAppRole(data.role),
+        storeName: data.branch_name || data.store_name || data.name || '',
+        position: data.position || '',
       });
-    } else {
-      // Check if this is a HQ account
-      const hqAccount = HQ_ACCOUNTS.find(a => a.email === email);
-      if (hqAccount) {
-        const profile: UserProfile = {
-          uid,
-          email: hqAccount.email,
-          name: hqAccount.name,
-          role: hqAccount.role as 'manager' | 'owner',
-          storeName: hqAccount.storeName,
-          position: hqAccount.position,
-        };
-        await supabase.from('user_roles').upsert({
-          uid,
-          email: hqAccount.email,
-          name: hqAccount.name,
-          role: hqAccount.role,
-          store_name: hqAccount.storeName,
-          position: hqAccount.position,
-        });
-        setUserProfile(profile);
-      }
     }
   };
 
@@ -346,7 +315,7 @@ export default function App() {
     });
 
     const initAuth = async () => {
-      // 허브 토큰으로 직접 세션 설정 (같은 Supabase)
+      // 1. URL 해시에서 토큰 확인 (허브 SSO callback)
       const hash = window.location.hash || '';
       if (hash.includes('access_token=')) {
         const params = new URLSearchParams(hash.substring(1));
@@ -358,10 +327,29 @@ export default function App() {
         }
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
+      // 2. 기존 세션 확인
+      let { data: { session } } = await supabase.auth.getSession();
+
+      // 3. 세션 없으면 허브 공유 토큰으로 자동 로그인 (같은 Supabase)
+      if (!session) {
+        try {
+          const hubRaw = localStorage.getItem('sunbi_hub_token');
+          if (hubRaw) {
+            const hub = JSON.parse(hubRaw);
+            if (hub?.access_token) {
+              const result = await supabase.auth.setSession({
+                access_token: hub.access_token,
+                refresh_token: hub.access_token,
+              });
+              session = result.data?.session ?? null;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
       setUser(session?.user ?? null);
       if (session?.user) {
-        loadUserProfile(session.user.id, session.user.email);
+        loadUserProfile(session.user.id, session.user.email ?? undefined);
       }
       setIsAuthReady(true);
     };
@@ -385,43 +373,20 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from('consulting_posts')
-        .select('*, users!consulting_posts_user_id_fkey(name)')
+        .select('*')
         .order('created_at', { ascending: false });
-      if (error) {
-        // Fallback without join if FK doesn't exist
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('consulting_posts')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (fallbackError) throw fallbackError;
-        const posts: ConsultingPost[] = (fallbackData ?? []).map((row: any) => ({
-          id: row.id,
-          category: row.category,
-          title: row.title,
-          content: row.content,
-          author: row.store_name || '알 수 없음',
-          authorUid: row.user_id,
-          storeName: row.store_name,
-          createdAt: row.created_at,
-          status: row.status,
-          answer: '',
-          answeredBy: '',
-          answeredAt: '',
-        }));
-        setConsultingPosts(posts);
-        return;
-      }
+      if (error) throw error;
       const posts: ConsultingPost[] = (data ?? []).map((row: any) => ({
         id: row.id,
         category: row.category,
         title: row.title,
         content: row.content,
-        author: row.users?.name || row.store_name || '알 수 없음',
+        author: row.store_name || '알 수 없음',
         authorUid: row.user_id,
         storeName: row.store_name,
         createdAt: row.created_at,
         status: row.status,
-        answer: '',
+        answer: row.answer || '',
         answeredBy: '',
         answeredAt: '',
       }));
@@ -483,12 +448,12 @@ export default function App() {
       const { data, error } = await supabase.from('user_roles').select('*');
       if (error) throw error;
       const users: UserProfile[] = (data ?? []).map((row: any) => ({
-        user_id: row.uid,
+        user_id: row.user_id,
         email: row.email,
-        name: row.name,
-        role: row.role,
-        storeName: row.store_name,
-        position: row.position,
+        name: row.name || row.branch_name || '',
+        role: toAppRole(row.role),
+        storeName: row.branch_name || row.store_name || row.name || '',
+        position: row.position || '',
         businessNumber: row.business_number,
         invoiceEmail: row.invoice_email,
         phone: row.phone,
@@ -509,9 +474,12 @@ export default function App() {
         email: loginForm.email,
         password: loginForm.password,
       });
-      if (error) throw error;
-    } catch (error: any) {
-      setAuthError(`로그인 실패: ${error?.message || '이메일과 비밀번호를 확인해 주세요.'}`);
+      if (error) {
+        setAuthError('이메일 또는 비밀번호가 틀렸습니다.');
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : '로그인에 실패했습니다.';
+      setAuthError(msg);
     }
     setAuthLoading(false);
   };
@@ -604,7 +572,7 @@ export default function App() {
         title: sosForm.title,
         message: sosForm.message,
         author: userProfile.name,
-        author_user_id: user?.id,
+        author_uid: user?.id,
         store_name: userProfile.storeName,
         created_at: new Date().toISOString(),
         status: 'pending',
@@ -799,23 +767,6 @@ export default function App() {
     setQaLoading(true);
 
     try {
-      let apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || '';
-      if (!apiKey) {
-        try {
-          const configRes = await fetch('/api/config');
-          const configData = await configRes.json();
-          apiKey = configData.geminiApiKey || '';
-        } catch {
-          // ignore
-        }
-      }
-
-      if (!apiKey) {
-        setQaMessages(prev => [...prev, { role: 'assistant', content: 'API 키가 설정되지 않았습니다. 관리자에게 문의해 주세요.' }]);
-        setQaLoading(false);
-        return;
-      }
-
       // Load knowledge base for context
       let kbContext = '';
       try {
@@ -828,7 +779,6 @@ export default function App() {
         // ignore KB load error
       }
 
-      const ai = new GoogleGenAI({ apiKey });
       const systemInstruction = `당신은 '선비칼국수'의 본사 자동 응답기입니다. 점주님들의 질문에 친절하고 전문적으로 답변해 주세요.
 
 주요 안내사항:
@@ -848,18 +798,27 @@ export default function App() {
         parts: [{ text: m.content }],
       }));
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          ...chatHistory,
-          { role: 'user', parts: [{ text: userMessage }] }
-        ],
-        config: {
+      const proxyRes = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            ...chatHistory,
+            { role: 'user', parts: [{ text: userMessage }] }
+          ],
           systemInstruction,
-        },
+        }),
       });
+      const proxyData = await proxyRes.json();
 
-      const assistantMessage = response.text || '죄송합니다. 응답을 생성하지 못했습니다.';
+      if (!proxyRes.ok || !proxyData.success) {
+        const errMsg = proxyData.error || 'AI 응답 생성에 실패했습니다.';
+        setQaMessages(prev => [...prev, { role: 'assistant', content: errMsg }]);
+        setQaLoading(false);
+        return;
+      }
+
+      const assistantMessage = proxyData.text || '죄송합니다. 응답을 생성하지 못했습니다.';
       setQaMessages(prev => [...prev, { role: 'assistant', content: assistantMessage }]);
     } catch (error) {
       console.error('Q&A Error:', error);
@@ -874,26 +833,24 @@ export default function App() {
     setCreateUserLoading(true);
     setCreateUserError('');
     try {
-      // Create auth account in Supabase
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: createUserForm.email,
-        password: createUserForm.password || 'sunbi1234',
-      });
-      if (authError) throw authError;
+      // 기존 user_roles에서 email로 사용자 찾기
+      const { data: existing } = await supabase.from('user_roles').select('user_id').eq('email', createUserForm.email).maybeSingle();
+      if (!existing) {
+        setCreateUserError('이 이메일의 계정이 허브에 등록되어 있지 않습니다. 먼저 허브에서 계정을 생성해 주세요.');
+        setCreateUserLoading(false);
+        return;
+      }
 
-      // Insert user profile into users table
-      const uid = authData.user?.id || '';
-      await supabase.from('user_roles').insert({
-        uid,
-        email: createUserForm.email,
+      // user_roles 프로필 업데이트
+      await supabase.from('user_roles').update({
         name: createUserForm.name,
-        role: createUserForm.role,
+        branch_name: createUserForm.storeName,
         store_name: createUserForm.storeName,
         position: createUserForm.position || (createUserForm.role === 'owner' ? '점주' : '직원'),
         business_number: createUserForm.businessNumber,
         invoice_email: createUserForm.invoiceEmail,
         phone: createUserForm.phone,
-      });
+      }).eq('user_id', existing.user_id);
 
       setCreateUserForm({ email: '', password: '', name: '', role: 'owner', storeName: '', position: '', businessNumber: '', invoiceEmail: '', phone: '' });
       loadAllUsers();

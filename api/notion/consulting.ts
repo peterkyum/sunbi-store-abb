@@ -6,8 +6,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
+  // Input validation
+  const { storeName, category, title, content } = req.body || {};
+  if (!storeName || typeof storeName !== 'string' || storeName.trim().length === 0) {
+    return res.status(400).json({ success: false, error: '가맹점명(storeName)이 필요합니다.' });
+  }
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    return res.status(400).json({ success: false, error: '제목(title)이 필요합니다.' });
+  }
+
   try {
-    const { storeName, category, title, content } = req.body;
     const databaseId = process.env.NOTION_DATABASE_ID_CONSULTING?.trim();
     const notionKey = process.env.NOTION_API_KEY?.trim();
 

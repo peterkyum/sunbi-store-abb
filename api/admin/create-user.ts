@@ -20,6 +20,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { email, password, name, role, storeName, position, adminUid } = req.body;
 
+    // TODO: Replace adminUid body param with Firebase Auth token verification.
+    // Currently trusting client-supplied adminUid — should verify via
+    // admin.auth().verifyIdToken(req.headers.authorization) instead.
+    if (!adminUid || typeof adminUid !== 'string' || adminUid.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'adminUid가 필요합니다.' });
+    }
+
+    if (!email || typeof email !== 'string' || email.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'email이 필요합니다.' });
+    }
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'name이 필요합니다.' });
+    }
+
     const adminDoc = await db.collection('users').doc(adminUid).get();
     if (!adminDoc.exists || adminDoc.data()?.role !== 'manager') {
       return res.status(403).json({ success: false, error: '권한이 없습니다.' });
