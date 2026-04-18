@@ -333,13 +333,21 @@ export default function App() {
       // 3. 세션 없으면 허브 공유 토큰으로 자동 로그인 (같은 Supabase)
       if (!session) {
         try {
-          const hubRaw = localStorage.getItem('sunbi_hub_token');
+          // iframe 내부이면 허브가 토큰을 저장할 때까지 최대 2초 대기
+          let hubRaw = localStorage.getItem('sunbi_hub_token');
+          if (!hubRaw && window.self !== window.top) {
+            for (let i = 0; i < 10; i++) {
+              await new Promise(r => setTimeout(r, 200));
+              hubRaw = localStorage.getItem('sunbi_hub_token');
+              if (hubRaw) break;
+            }
+          }
           if (hubRaw) {
             const hub = JSON.parse(hubRaw);
-            if (hub?.access_token) {
+            if (hub?.access_token && hub?.refresh_token) {
               const result = await supabase.auth.setSession({
                 access_token: hub.access_token,
-                refresh_token: hub.access_token,
+                refresh_token: hub.refresh_token,
               });
               session = result.data?.session ?? null;
             }
